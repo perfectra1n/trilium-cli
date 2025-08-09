@@ -80,6 +80,10 @@ regex = "1.10"
 # Stdin detection
 atty = "0.2"
 
+# Security dependencies
+zeroize = { version = "1.7", features = ["derive"] }
+once_cell = "1.19"
+
 [dev-dependencies]
 # Testing utilities
 mockito = "1.4"

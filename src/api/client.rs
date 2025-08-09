@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{Config, SecureString};
 use crate::error::{Result, TriliumError};
 use crate::models::*;
 use reqwest::{Client, Response, StatusCode};
@@ -12,7 +12,7 @@ use tracing::{debug, warn};
 pub struct TriliumClient {
     client: Client,
     base_url: String,
-    api_token: Option<String>,
+    api_token: Option<SecureString>,
 }
 
 impl TriliumClient {
@@ -46,7 +46,7 @@ impl TriliumClient {
 
         // Add authentication header if token is available
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         // Add JSON body if provided
@@ -77,23 +77,7 @@ impl TriliumClient {
         }
     }
 
-    // Authentication
-    pub async fn login(&mut self, password: &str) -> Result<String> {
-        let request = LoginRequest {
-            password: password.to_string(),
-        };
-        let response: LoginResponse = self
-            .send_request(reqwest::Method::POST, "/auth/login", Some(request))
-            .await?;
-        self.api_token = Some(response.auth_token.clone());
-        Ok(response.auth_token)
-    }
-
-    pub async fn logout(&self) -> Result<()> {
-        self.send_request::<serde_json::Value>(reqwest::Method::POST, "/auth/logout", None::<()>)
-            .await?;
-        Ok(())
-    }
+    // Authentication methods removed - not used in CLI application
 
     // App Info
     pub async fn get_app_info(&self) -> Result<AppInfo> {
@@ -136,7 +120,7 @@ impl TriliumClient {
         let mut request = self.client.get(&url);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         let response = request.send().await?;
@@ -155,7 +139,7 @@ impl TriliumClient {
         let mut request = self.client.put(&url);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         request = request.header("Content-Type", "text/plain").body(content.to_string());
@@ -181,7 +165,7 @@ impl TriliumClient {
         let mut request = self.client.get(&url).query(&params);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         let response = request.send().await?;
@@ -195,10 +179,6 @@ impl TriliumClient {
             .await
     }
 
-    pub async fn get_branch(&self, branch_id: &str) -> Result<Branch> {
-        self.send_request(reqwest::Method::GET, &format!("/branches/{}", branch_id), None::<()>)
-            .await
-    }
 
     pub async fn update_branch(&self, branch_id: &str, request: UpdateBranchRequest) -> Result<Branch> {
         self.send_request(
@@ -219,20 +199,21 @@ impl TriliumClient {
         Ok(())
     }
 
+    pub async fn get_note_branches(&self, note_id: &str) -> Result<Vec<Branch>> {
+        self.send_request(
+            reqwest::Method::GET,
+            &format!("/notes/{}/branches", note_id),
+            None::<()>,
+        )
+        .await
+    }
+
     // Attributes
     pub async fn create_attribute(&self, request: CreateAttributeRequest) -> Result<Attribute> {
         self.send_request(reqwest::Method::POST, "/attributes", Some(request))
             .await
     }
 
-    pub async fn get_attribute(&self, attribute_id: &str) -> Result<Attribute> {
-        self.send_request(
-            reqwest::Method::GET,
-            &format!("/attributes/{}", attribute_id),
-            None::<()>,
-        )
-        .await
-    }
 
     pub async fn update_attribute(&self, attribute_id: &str, request: UpdateAttributeRequest) -> Result<Attribute> {
         self.send_request(
@@ -277,7 +258,7 @@ impl TriliumClient {
         let mut request = self.client.post(&url);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         // Detect MIME type from file extension
@@ -299,7 +280,7 @@ impl TriliumClient {
         let mut request = self.client.get(&url);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         let response = request.send().await?;
@@ -352,7 +333,7 @@ impl TriliumClient {
         let mut request = self.client.put(&url);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         if !params.is_empty() {
@@ -390,7 +371,7 @@ impl TriliumClient {
             .query(&[("format", format)]);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         let response = request.send().await?;
@@ -411,7 +392,7 @@ impl TriliumClient {
             .body(content);
 
         if let Some(token) = &self.api_token {
-            request = request.header("Authorization", token);
+            request = request.header("Authorization", token.as_str());
         }
 
         let response = request.send().await?;
@@ -443,7 +424,7 @@ mod tests {
     fn test_config() -> Config {
         Config {
             server_url: "http://localhost:9999".to_string(),
-            api_token: Some("test_token".to_string()),
+            api_token: Some(crate::config::SecureString::from("test_token")),
             default_parent_id: "root".to_string(),
             default_note_type: "text".to_string(),
             editor: None,
@@ -475,7 +456,7 @@ mod tests {
         assert!(client.is_ok());
         let client = client.unwrap();
         assert_eq!(client.base_url, "http://localhost:9999");
-        assert_eq!(client.api_token, Some("test_token".to_string()));
+        assert_eq!(client.api_token, Some(crate::config::SecureString::from("test_token")));
     }
 
     #[test]

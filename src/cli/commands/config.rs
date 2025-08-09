@@ -41,7 +41,7 @@ pub async fn handle(command: ConfigCommands, config: &Config) -> Result<()> {
             let value_display = value.clone();
             match key.as_str() {
                 "server_url" | "server-url" => new_config.server_url = value,
-                "api_token" | "api-token" | "token" => new_config.api_token = Some(value),
+                "api_token" | "api-token" | "token" => new_config.api_token = Some(crate::config::SecureString::from(value)),
                 "default_parent_id" | "default-parent-id" | "parent" => new_config.default_parent_id = value,
                 "default_note_type" | "default-note-type" | "type" => new_config.default_note_type = value,
                 "editor" => new_config.editor = Some(value),

@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +24,7 @@ pub struct Note {
     pub attributes: Option<Vec<Attribute>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateNoteRequest {
     pub parent_note_id: String,
@@ -220,23 +219,4 @@ impl NoteTreeItem {
         }
     }
 
-    pub fn count_visible_items(&self) -> usize {
-        let mut count = 1;
-        if self.is_expanded {
-            for child in &self.children {
-                count += child.count_visible_items();
-            }
-        }
-        count
-    }
-
-    pub fn get_visible_items(&self) -> Vec<&NoteTreeItem> {
-        let mut items = vec![self];
-        if self.is_expanded {
-            for child in &self.children {
-                items.extend(child.get_visible_items());
-            }
-        }
-        items
-    }
 }

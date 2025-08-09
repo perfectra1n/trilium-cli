@@ -51,9 +51,11 @@ pub async fn handle(command: AttachmentCommands, config: &Config, output_format:
         AttachmentCommands::Delete { attachment_id, force } => {
             if !force {
                 print!("Are you sure you want to delete attachment {}? [y/N] ", attachment_id);
-                io::stdout().flush().unwrap();
+                io::stdout().flush()
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                io::stdin().read_line(&mut input)
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to read user input: {}", e)))?;
                 if !input.trim().eq_ignore_ascii_case("y") {
                     print_warning("Deletion cancelled");
                     return Ok(());
@@ -62,6 +64,12 @@ pub async fn handle(command: AttachmentCommands, config: &Config, output_format:
 
             client.delete_attachment(&attachment_id).await?;
             print_success(&format!("Deleted attachment: {}", attachment_id));
+            Ok(())
+        }
+
+        AttachmentCommands::Info { attachment_id } => {
+            let attachment = client.get_attachment(&attachment_id).await?;
+            print_attachments(&[attachment], output_format);
             Ok(())
         }
     }

@@ -68,8 +68,10 @@ pub fn print_attachments(attachments: &[Attachment], format: &str) {
 }
 
 fn print_json<T: Serialize>(data: T) {
-    let json = serde_json::to_string_pretty(&data).unwrap();
-    println!("{}", json);
+    match serde_json::to_string_pretty(&data) {
+        Ok(json) => println!("{}", json),
+        Err(e) => eprintln!("Error serializing to JSON: {}", e),
+    }
 }
 
 fn print_notes_table(notes: &[Note]) {
@@ -311,7 +313,7 @@ pub fn print_info(message: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Utc};
+    use chrono::Utc;
 
     fn create_test_note() -> Note {
         Note {

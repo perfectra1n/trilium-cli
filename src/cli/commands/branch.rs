@@ -14,11 +14,12 @@ pub async fn handle(command: BranchCommands, config: &Config, output_format: &st
             note_id,
             parent_id,
             prefix,
+            position,
         } => {
             let request = CreateBranchRequest {
                 note_id: note_id.clone(),
                 parent_note_id: parent_id,
-                note_position: None,
+                note_position: position,
                 prefix,
                 is_expanded: None,
             };
@@ -29,26 +30,31 @@ pub async fn handle(command: BranchCommands, config: &Config, output_format: &st
             Ok(())
         }
 
-        BranchCommands::Get { branch_id } => {
-            let branch = client.get_branch(&branch_id).await?;
-            print_branches(&[branch], output_format);
+        BranchCommands::List { note_id } => {
+            let branches = client.get_note_branches(&note_id).await?;
+            if branches.is_empty() {
+                print_warning(&format!("No branches found for note: {}", note_id));
+            } else {
+                print_branches(&branches, output_format);
+            }
             Ok(())
         }
 
         BranchCommands::Update {
             branch_id,
             prefix,
-            parent,
+            position,
+            expanded,
         } => {
-            if prefix.is_none() && parent.is_none() {
+            if prefix.is_none() && position.is_none() && expanded.is_none() {
                 print_warning("No changes specified");
                 return Ok(());
             }
 
             let request = UpdateBranchRequest {
-                note_position: None,
+                note_position: position,
                 prefix,
-                is_expanded: None,
+                is_expanded: expanded,
             };
 
             let branch = client.update_branch(&branch_id, request).await?;
@@ -59,9 +65,11 @@ pub async fn handle(command: BranchCommands, config: &Config, output_format: &st
         BranchCommands::Delete { branch_id, force } => {
             if !force {
                 print!("Are you sure you want to delete branch {}? [y/N] ", branch_id);
-                io::stdout().flush().unwrap();
+                io::stdout().flush()
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                io::stdin().read_line(&mut input)
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to read user input: {}", e)))?;
                 if !input.trim().eq_ignore_ascii_case("y") {
                     print_warning("Deletion cancelled");
                     return Ok(());

@@ -98,7 +98,7 @@ pub enum Commands {
         date: String,
 
         /// Create if doesn't exist
-        #[arg(short, long)]
+        #[arg(long)]
         create: bool,
     },
 

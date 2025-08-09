@@ -1,6 +1,6 @@
 use crate::api::TriliumClient;
 use crate::config::Config;
-use crate::error::{Result, TriliumError};
+use crate::error::Result;
 use crate::models::{Note, NoteTreeItem, CreateNoteRequest, UpdateNoteRequest};
 use crate::tui::event::{Event, Events};
 use crate::tui::ui;
@@ -26,7 +26,6 @@ pub enum ViewMode {
 
 pub struct App {
     pub client: TriliumClient,
-    pub config: Config,
     pub tree_items: Vec<NoteTreeItem>,
     pub selected_index: usize,
     pub current_note: Option<Note>,
@@ -56,7 +55,6 @@ impl App {
 
         Ok(Self {
             client,
-            config,
             tree_items,
             selected_index: 0,
             current_note: None,
@@ -74,19 +72,18 @@ impl App {
     }
 
     pub async fn run<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<()> {
-        let events = Events::new(Duration::from_millis(250));
+        let events = Events::new(Duration::from_millis(250))?;
 
         loop {
             terminal.draw(|f| ui::draw(f, self))?;
 
-            match events.next() {
-                Ok(Event::Input(key)) => {
+            match events.next()? {
+                Event::Input(key) => {
                     if let Err(e) = self.handle_input(key).await {
                         self.status_message = Some(format!("Error: {}", e));
                     }
                 }
-                Ok(Event::Tick) => {}
-                Err(_) => break,
+                Event::Tick => {}
             }
 
             if self.should_quit {
@@ -274,7 +271,7 @@ impl App {
     }
 
     fn toggle_expansion(&mut self, note_id: &str) {
-        fn toggle_recursive(items: &mut Vec<NoteTreeItem>, note_id: &str) -> bool {
+        fn toggle_recursive(items: &mut [NoteTreeItem], note_id: &str) -> bool {
             for item in items.iter_mut() {
                 if item.note.note_id == note_id {
                     item.is_expanded = !item.is_expanded;
@@ -290,7 +287,7 @@ impl App {
     }
 
     fn update_tree_children(&mut self, parent_id: &str, children: Vec<Note>) -> Result<()> {
-        fn update_recursive(items: &mut Vec<NoteTreeItem>, parent_id: &str, children: Vec<Note>, depth: usize) -> bool {
+        fn update_recursive(items: &mut [NoteTreeItem], parent_id: &str, children: Vec<Note>, depth: usize) -> bool {
             for item in items.iter_mut() {
                 if item.note.note_id == parent_id {
                     item.children = children.into_iter()
@@ -425,9 +422,9 @@ impl App {
     }
 
     fn edit_note_prompt(&mut self) {
-        if self.current_note.is_some() {
+        if let Some(note) = &self.current_note {
             self.input_mode = InputMode::Editing;
-            self.input = self.current_note.as_ref().unwrap().title.clone();
+            self.input = note.title.clone();
             self.status_message = Some("Edit note title:".to_string());
         }
     }

@@ -4,11 +4,161 @@ use crate::error::{Result};
 use crate::models::{CreateNoteRequest, CreateAttributeRequest};
 use chrono::Utc;
 use colored::Colorize;
+use once_cell::sync::Lazy;
+use regex::Regex;
+
+// Input validation utilities
+pub mod validation {
+    use crate::error::{Result, TriliumError};
+
+    const MAX_TITLE_LENGTH: usize = 255;
+    const MAX_CONTENT_LENGTH: usize = 10_000_000; // 10MB
+    const MAX_ATTRIBUTE_KEY_LENGTH: usize = 100;
+    const MAX_ATTRIBUTE_VALUE_LENGTH: usize = 1000;
+    const MAX_TAG_LENGTH: usize = 50;
+
+    pub fn validate_title(title: &str) -> Result<()> {
+        if title.is_empty() {
+            return Err(TriliumError::ValidationError("Title cannot be empty".to_string()));
+        }
+
+        if title.len() > MAX_TITLE_LENGTH {
+            return Err(TriliumError::ValidationError(
+                format!("Title too long: {} characters (max: {})", title.len(), MAX_TITLE_LENGTH)
+            ));
+        }
+
+        // Check for dangerous characters that might cause issues
+        if title.contains('\0') || title.contains('\n') || title.contains('\r') {
+            return Err(TriliumError::ValidationError(
+                "Title contains invalid characters (null, newline)".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_content(content: &str) -> Result<()> {
+        if content.len() > MAX_CONTENT_LENGTH {
+            return Err(TriliumError::ValidationError(
+                format!("Content too large: {} bytes (max: {} bytes)", 
+                       content.len(), MAX_CONTENT_LENGTH)
+            ));
+        }
+
+        // Check for null bytes which can cause issues in databases
+        if content.contains('\0') {
+            return Err(TriliumError::ValidationError(
+                "Content contains null bytes".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_attribute_key(key: &str) -> Result<()> {
+        if key.is_empty() {
+            return Err(TriliumError::ValidationError("Attribute key cannot be empty".to_string()));
+        }
+
+        if key.len() > MAX_ATTRIBUTE_KEY_LENGTH {
+            return Err(TriliumError::ValidationError(
+                format!("Attribute key too long: {} characters (max: {})", 
+                       key.len(), MAX_ATTRIBUTE_KEY_LENGTH)
+            ));
+        }
+
+        // Validate attribute key format (alphanumeric, underscore, dash)
+        if !key.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+            return Err(TriliumError::ValidationError(
+                "Attribute key can only contain letters, numbers, underscore, and dash".to_string()
+            ));
+        }
+
+        // Keys shouldn't start with numbers or special chars
+        if !key.chars().next().unwrap_or('a').is_alphabetic() {
+            return Err(TriliumError::ValidationError(
+                "Attribute key must start with a letter".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_attribute_value(value: &str) -> Result<()> {
+        if value.len() > MAX_ATTRIBUTE_VALUE_LENGTH {
+            return Err(TriliumError::ValidationError(
+                format!("Attribute value too long: {} characters (max: {})", 
+                       value.len(), MAX_ATTRIBUTE_VALUE_LENGTH)
+            ));
+        }
+
+        // Check for null bytes
+        if value.contains('\0') {
+            return Err(TriliumError::ValidationError(
+                "Attribute value contains null bytes".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_tag(tag: &str) -> Result<()> {
+        if tag.is_empty() {
+            return Err(TriliumError::ValidationError("Tag cannot be empty".to_string()));
+        }
+
+        if tag.len() > MAX_TAG_LENGTH {
+            return Err(TriliumError::ValidationError(
+                format!("Tag too long: {} characters (max: {})", tag.len(), MAX_TAG_LENGTH)
+            ));
+        }
+
+        // Tags should be alphanumeric with limited special chars
+        if !tag.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+            return Err(TriliumError::ValidationError(
+                "Tag can only contain letters, numbers, underscore, dash, and dot".to_string()
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn validate_note_id(note_id: &str) -> Result<()> {
+        if note_id.is_empty() {
+            return Err(TriliumError::ValidationError("Note ID cannot be empty".to_string()));
+        }
+
+        // Trilium note IDs are typically alphanumeric
+        if !note_id.chars().all(|c| c.is_alphanumeric()) {
+            return Err(TriliumError::ValidationError(
+                "Note ID can only contain letters and numbers".to_string()
+            ));
+        }
+
+        if note_id.len() > 50 {
+            return Err(TriliumError::ValidationError(
+                format!("Note ID too long: {} characters (max: 50)", note_id.len())
+            ));
+        }
+
+        Ok(())
+    }
+
+    pub fn sanitize_input(input: &str) -> String {
+        // Remove or replace problematic characters
+        input
+            .replace('\0', "") // Remove null bytes
+            .trim() // Remove leading/trailing whitespace
+            .to_string()
+    }
+}
 
 // Utility module for stdin operations
 pub mod stdin_utils {
     use std::io::{self, Read, IsTerminal};
-    use anyhow::Result;
+    use crate::error::{Result, TriliumError};
+    use super::validation;
 
     pub fn is_stdin_piped() -> bool {
         !io::stdin().is_terminal()
@@ -16,41 +166,72 @@ pub mod stdin_utils {
 
     pub fn read_stdin() -> Result<String> {
         if !is_stdin_piped() {
-            return Err(anyhow::anyhow!("No input piped to stdin. Use 'echo \"content\" | trilium pipe' or redirect from a file."));
+            return Err(TriliumError::InputError(
+                "No input piped to stdin. Use 'echo \"content\" | trilium pipe' or redirect from a file.".to_string()
+            ));
         }
 
         let mut buffer = String::new();
-        io::stdin().read_to_string(&mut buffer)?;
+        io::stdin().read_to_string(&mut buffer)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read from stdin: {}", e)))?;
         
         if buffer.is_empty() {
-            return Err(anyhow::anyhow!("Empty input received from stdin"));
+            return Err(TriliumError::InputError("Empty input received from stdin".to_string()));
         }
 
-        Ok(buffer)
+        // Validate content size before processing
+        validation::validate_content(&buffer)?;
+        
+        Ok(validation::sanitize_input(&buffer))
     }
 
-    pub fn read_stdin_with_timeout(timeout_ms: u64) -> Result<String> {
-        use std::time::Duration;
-        use std::thread;
-        use std::sync::mpsc;
-
-        let (tx, rx) = mpsc::channel();
-
-        thread::spawn(move || {
-            let result = read_stdin();
-            let _ = tx.send(result);
-        });
-
-        match rx.recv_timeout(Duration::from_millis(timeout_ms)) {
-            Ok(result) => result,
-            Err(_) => Err(anyhow::anyhow!("Timeout reading from stdin")),
-        }
-    }
 }
+
+// Static regex patterns for performance and security
+pub static HTML_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"(?i)<(!DOCTYPE\s+html|html|head|body|div|p|span|a\s|img\s|table|ul|ol|h[1-6])[\s>]")
+        .expect("Failed to compile HTML regex")
+});
+
+pub static HEADING_PATTERN: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"^#{1,6}\s+(.+)$")
+        .expect("Failed to compile heading regex")
+});
+
+pub static MARKDOWN_PATTERNS: Lazy<Vec<Regex>> = Lazy::new(|| {
+    vec![
+        Regex::new(r"^#{1,6}\s+.+").expect("Failed to compile markdown header regex"),
+        Regex::new(r"^\*{1,2}[^*\n]+\*{1,2}").expect("Failed to compile markdown bold regex"),
+        Regex::new(r"^_{1,2}[^_\n]+_{1,2}").expect("Failed to compile markdown italic regex"),
+        Regex::new(r"^\[.+\]\(.+\)").expect("Failed to compile markdown link regex"),
+        Regex::new(r"^!\[.*\]\(.+\)").expect("Failed to compile markdown image regex"),
+        Regex::new(r"^[\*\-+]\s+.+").expect("Failed to compile markdown list regex"),
+        Regex::new(r"^\d+\.\s+.+").expect("Failed to compile markdown ordered list regex"),
+        Regex::new(r"^```[\s\S]*```").expect("Failed to compile markdown code block regex"),
+        Regex::new(r"^`[^`]+`").expect("Failed to compile markdown inline code regex"),
+        Regex::new(r"^>\s+.+").expect("Failed to compile markdown blockquote regex"),
+        Regex::new(r"^\|.+\|.+\|").expect("Failed to compile markdown table regex"),
+    ]
+});
+
+pub static CODE_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
+    vec![
+        (Regex::new(r"(?m)^(import\s+\w+|from\s+\w+\s+import)").expect("Python import regex"), "python"),
+        (Regex::new(r"(?m)^(use\s+(strict|warnings)|my\s+\$|sub\s+\w+\s*\{)").expect("Perl regex"), "perl"),
+        (Regex::new(r"(?m)^(package\s+\w+|import\s+\(|func\s+\w+|var\s+\w+\s+)").expect("Go regex"), "go"),
+        (Regex::new(r"(?m)^(fn\s+\w+|let\s+mut\s+|impl\s+|pub\s+fn|use\s+\w+::)").expect("Rust regex"), "rust"),
+        (Regex::new(r"(?m)^(function\s+\w+|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|export\s+)").expect("JavaScript regex"), "javascript"),
+        (Regex::new(r#"(?m)^(def\s+\w+|class\s+\w+|require\s+['"])"#).expect("Ruby regex"), "ruby"),
+        (Regex::new(r"(?m)^(public\s+class|private\s+|protected\s+|import\s+java\.|package\s+)").expect("Java regex"), "java"),
+        (Regex::new(r"(?m)^(#include\s*<|int\s+main\s*\(|void\s+\w+\s*\(|typedef\s+)").expect("C regex"), "c"),
+        (Regex::new(r"(?m)^(<\?php|namespace\s+\w+;|use\s+\w+\\)").expect("PHP regex"), "php"),
+        (Regex::new(r"(?m)^(SELECT\s+|INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|CREATE\s+TABLE)").expect("SQL regex"), "sql"),
+    ]
+});
 
 // Format detection module
 pub mod format_detector {
-    use regex::Regex;
+    use super::*;
     use serde_json;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -106,34 +287,18 @@ pub mod format_detector {
         }
 
         fn is_html(&self) -> bool {
-            let html_regex = Regex::new(r"(?i)<(!DOCTYPE\s+html|html|head|body|div|p|span|a\s|img\s|table|ul|ol|h[1-6])[\s>]").unwrap();
             let trimmed = self.content.trim();
             
             // Check for DOCTYPE or common HTML tags
-            html_regex.is_match(trimmed) ||
+            super::HTML_PATTERN.is_match(trimmed) ||
             (trimmed.starts_with("<!") || trimmed.starts_with("<html") || trimmed.starts_with("<HTML"))
         }
 
         fn is_markdown(&self) -> bool {
-            let markdown_patterns = [
-                r"^#{1,6}\s+.+",        // Headers
-                r"^\*{1,2}[^*\n]+\*{1,2}",  // Bold/italic
-                r"^_{1,2}[^_\n]+_{1,2}",    // Bold/italic
-                r"^\[.+\]\(.+\)",           // Links
-                r"^!\[.*\]\(.+\)",          // Images
-                r"^[\*\-+]\s+.+",           // Unordered lists
-                r"^\d+\.\s+.+",             // Ordered lists
-                r"^```[\s\S]*```",          // Code blocks
-                r"^`[^`]+`",                // Inline code
-                r"^>\s+.+",                 // Blockquotes
-                r"^\|.+\|.+\|",             // Tables
-            ];
-
             let mut markdown_score = 0;
             let lines: Vec<&str> = self.content.lines().collect();
             
-            for pattern_str in &markdown_patterns {
-                let pattern = Regex::new(pattern_str).unwrap();
+            for pattern in super::MARKDOWN_PATTERNS.iter() {
                 for line in &lines {
                     if pattern.is_match(line) {
                         markdown_score += 1;
@@ -162,22 +327,8 @@ pub mod format_detector {
                 }
             }
 
-            // Check for common code patterns
-            let code_patterns = vec![
-                (r"(?m)^(import\s+\w+|from\s+\w+\s+import)", "python"),
-                (r"(?m)^(use\s+(strict|warnings)|my\s+\$|sub\s+\w+\s*\{)", "perl"),
-                (r"(?m)^(package\s+\w+|import\s+\(|func\s+\w+|var\s+\w+\s+)", "go"),
-                (r"(?m)^(fn\s+\w+|let\s+mut\s+|impl\s+|pub\s+fn|use\s+\w+::)", "rust"),
-                (r"(?m)^(function\s+\w+|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|export\s+)", "javascript"),
-                (r#"(?m)^(def\s+\w+|class\s+\w+|require\s+['"])"#, "ruby"),
-                (r"(?m)^(public\s+class|private\s+|protected\s+|import\s+java\.|package\s+)", "java"),
-                (r"(?m)^(#include\s*<|int\s+main\s*\(|void\s+\w+\s*\(|typedef\s+)", "c"),
-                (r"(?m)^(<\?php|namespace\s+\w+;|use\s+\w+\\)", "php"),
-                (r"(?m)^(SELECT\s+|INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|CREATE\s+TABLE)", "sql"),
-            ];
-
-            for (pattern_str, lang) in code_patterns {
-                let pattern = Regex::new(pattern_str).unwrap();
+            // Check for common code patterns using cached regexes
+            for (pattern, lang) in super::CODE_PATTERNS.iter() {
                 if pattern.is_match(&self.content) {
                     return Some(lang.to_string());
                 }
@@ -199,32 +350,6 @@ pub mod format_detector {
             None
         }
 
-        pub fn detect_from_extension(extension: &str) -> ContentFormat {
-            match extension.to_lowercase().as_str() {
-                "md" | "markdown" => ContentFormat::Markdown,
-                "html" | "htm" => ContentFormat::Html,
-                "json" => ContentFormat::Json,
-                "py" => ContentFormat::Code("python".to_string()),
-                "js" | "javascript" => ContentFormat::Code("javascript".to_string()),
-                "ts" | "typescript" => ContentFormat::Code("typescript".to_string()),
-                "rs" => ContentFormat::Code("rust".to_string()),
-                "go" => ContentFormat::Code("go".to_string()),
-                "java" => ContentFormat::Code("java".to_string()),
-                "c" | "h" => ContentFormat::Code("c".to_string()),
-                "cpp" | "cc" | "cxx" | "hpp" => ContentFormat::Code("cpp".to_string()),
-                "cs" => ContentFormat::Code("csharp".to_string()),
-                "rb" => ContentFormat::Code("ruby".to_string()),
-                "php" => ContentFormat::Code("php".to_string()),
-                "sh" | "bash" => ContentFormat::Code("bash".to_string()),
-                "sql" => ContentFormat::Code("sql".to_string()),
-                "yaml" | "yml" => ContentFormat::Code("yaml".to_string()),
-                "toml" => ContentFormat::Code("toml".to_string()),
-                "xml" => ContentFormat::Code("xml".to_string()),
-                "css" => ContentFormat::Code("css".to_string()),
-                "scss" | "sass" => ContentFormat::Code("scss".to_string()),
-                _ => ContentFormat::PlainText,
-            }
-        }
     }
 }
 
@@ -277,7 +402,6 @@ pub mod content_processor {
                 title,
                 content,
                 note_type: note_type.to_string(),
-                mime_type: Some(if strip_html { "text/markdown" } else { "text/html" }.to_string()),
             }
         }
 
@@ -313,16 +437,13 @@ pub mod content_processor {
                 title,
                 content: self.content.clone(),
                 note_type: "text".to_string(),
-                mime_type: Some("text/markdown".to_string()),
             }
         }
 
         fn extract_markdown_title(&self) -> Option<String> {
-            // Look for first heading
-            let heading_regex = Regex::new(r"^#{1,6}\s+(.+)$").unwrap();
-            
+            // Look for first heading using cached regex
             for line in self.content.lines() {
-                if let Some(captures) = heading_regex.captures(line) {
+                if let Some(captures) = super::HEADING_PATTERN.captures(line) {
                     if let Some(title) = captures.get(1) {
                         return Some(title.as_str().trim().to_string());
                     }
@@ -354,7 +475,6 @@ pub mod content_processor {
                 title,
                 content: format!("```json\n{}\n```", formatted_content),
                 note_type: "code".to_string(),
-                mime_type: Some("application/json".to_string()),
             }
         }
 
@@ -365,7 +485,6 @@ pub mod content_processor {
                 title: None,
                 content,
                 note_type: "code".to_string(),
-                mime_type: Some(format!("text/x-{}", language)),
             }
         }
 
@@ -374,7 +493,6 @@ pub mod content_processor {
                 title: None,
                 content: self.content.clone(),
                 note_type: "text".to_string(),
-                mime_type: Some("text/plain".to_string()),
             }
         }
     }
@@ -383,7 +501,6 @@ pub mod content_processor {
         pub title: Option<String>,
         pub content: String,
         pub note_type: String,
-        pub mime_type: Option<String>,
     }
 }
 
@@ -408,6 +525,7 @@ pub async fn handle(
     use stdin_utils::*;
     use format_detector::*;
     use content_processor::*;
+    use validation::*;
 
     // Read from stdin
     let input = read_stdin()?;
@@ -456,7 +574,8 @@ pub async fn handle(
             "html" => ContentFormat::Html,
             "json" => ContentFormat::Json,
             "code" => ContentFormat::Code(language.clone().unwrap_or_else(|| "text".to_string())),
-            "text" | _ => ContentFormat::PlainText,
+            "text" => ContentFormat::PlainText,
+            _ => ContentFormat::PlainText,
         }
     };
 
@@ -475,6 +594,9 @@ pub async fn handle(
         // Generate title from timestamp
         format!("Piped Note - {}", Utc::now().format("%Y-%m-%d %H:%M:%S"))
     });
+
+    // Validate the final title
+    validate_title(&final_title)?;
 
     // Determine note type
     let final_note_type = if note_type == "auto" {
@@ -507,10 +629,11 @@ pub async fn handle(
 
     let note = client.create_note(request).await?;
 
-    // Add attributes
+    // Add attributes with validation
     if let Some(ref tags_str) = tags {
         for tag in tags_str.split(',').map(|s| s.trim()) {
             if !tag.is_empty() {
+                validate_tag(tag)?;
                 add_label(&client, &note.note_id, tag).await?;
             }
         }
@@ -519,6 +642,7 @@ pub async fn handle(
     if let Some(ref labels_str) = labels {
         for label in labels_str.split(',').map(|s| s.trim()) {
             if !label.is_empty() {
+                validate_tag(label)?;
                 add_label(&client, &note.note_id, label).await?;
             }
         }
@@ -526,7 +650,11 @@ pub async fn handle(
 
     for attr_str in &attributes {
         if let Some((key, value)) = attr_str.split_once('=') {
-            add_attribute(&client, &note.note_id, key.trim(), value.trim()).await?;
+            let key = key.trim();
+            let value = value.trim();
+            validate_attribute_key(key)?;
+            validate_attribute_value(value)?;
+            add_attribute(&client, &note.note_id, key, value).await?;
         }
     }
 
@@ -540,7 +668,7 @@ pub async fn handle(
             note.note_id.yellow()
         );
         
-        if !tags.is_none() || !labels.is_none() || !attributes.is_empty() {
+        if tags.is_some() || labels.is_some() || !attributes.is_empty() {
             println!("  --> Added {} attributes", 
                 (tags.as_ref().map(|t| t.split(',').count()).unwrap_or(0) +
                  labels.as_ref().map(|l| l.split(',').count()).unwrap_or(0) +
@@ -597,7 +725,8 @@ async fn handle_batch_mode(
                 "html" => ContentFormat::Html,
                 "json" => ContentFormat::Json,
                 "code" => ContentFormat::Code(language.clone().unwrap_or_else(|| "text".to_string())),
-                "text" | _ => ContentFormat::PlainText,
+                "text" => ContentFormat::PlainText,
+            _ => ContentFormat::PlainText,
             }
         };
 
@@ -608,8 +737,9 @@ async fn handle_batch_mode(
         // Determine title
         let final_title = if let Some(ref prefix) = title_prefix {
             format!("{} - Part {}", prefix, index + 1)
-        } else if extract_title && processed.title.is_some() {
-            processed.title.unwrap()
+        } else if extract_title {
+            processed.title.unwrap_or_else(|| 
+                format!("Batch Note {} - {}", index + 1, Utc::now().format("%Y-%m-%d %H:%M:%S")))
         } else {
             format!("Batch Note {} - {}", index + 1, Utc::now().format("%Y-%m-%d %H:%M:%S"))
         };
@@ -693,7 +823,11 @@ async fn handle_append_mode(
 ) -> Result<()> {
     use format_detector::*;
     use content_processor::*;
+    use validation::*;
 
+    // Validate note ID
+    validate_note_id(&note_id)?;
+    
     let client = TriliumClient::new(config)?;
     
     // Get existing note content
@@ -708,7 +842,8 @@ async fn handle_append_mode(
             "html" => ContentFormat::Html,
             "json" => ContentFormat::Json,
             "code" => ContentFormat::Code(language.clone().unwrap_or_else(|| "text".to_string())),
-            "text" | _ => ContentFormat::PlainText,
+            "text" => ContentFormat::PlainText,
+            _ => ContentFormat::PlainText,
         }
     };
 
@@ -773,8 +908,7 @@ async fn add_attribute(client: &TriliumClient, note_id: &str, name: &str, value:
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::format_detector::*;
+    use super::format_detector::{FormatDetector, ContentFormat};
 
     #[test]
     fn test_detect_markdown() {
@@ -923,18 +1057,6 @@ Just regular content."#;
         assert_eq!(detector.detect(), ContentFormat::PlainText);
     }
 
-    #[test]
-    fn test_detect_from_extension() {
-        assert_eq!(FormatDetector::detect_from_extension("md"), ContentFormat::Markdown);
-        assert_eq!(FormatDetector::detect_from_extension("markdown"), ContentFormat::Markdown);
-        assert_eq!(FormatDetector::detect_from_extension("html"), ContentFormat::Html);
-        assert_eq!(FormatDetector::detect_from_extension("json"), ContentFormat::Json);
-        assert_eq!(FormatDetector::detect_from_extension("py"), ContentFormat::Code("python".to_string()));
-        assert_eq!(FormatDetector::detect_from_extension("js"), ContentFormat::Code("javascript".to_string()));
-        assert_eq!(FormatDetector::detect_from_extension("rs"), ContentFormat::Code("rust".to_string()));
-        assert_eq!(FormatDetector::detect_from_extension("txt"), ContentFormat::PlainText);
-        assert_eq!(FormatDetector::detect_from_extension("unknown"), ContentFormat::PlainText);
-    }
 
     #[test]
     fn test_invalid_json_not_detected() {
@@ -966,9 +1088,11 @@ function example() {
 
 ## More markdown
 
-- List item"#;
+- List item
+- Another list item
+> A blockquote"#;
         let detector = FormatDetector::new(content.to_string());
-        // Should detect as markdown due to multiple markdown patterns
+        // Should detect as markdown due to multiple markdown patterns (4 patterns: 2 headers, 2 lists, 1 blockquote)
         assert_eq!(detector.detect(), ContentFormat::Markdown);
     }
 }

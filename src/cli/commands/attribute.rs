@@ -15,15 +15,16 @@ pub async fn handle(command: AttributeCommands, config: &Config, output_format: 
             attr_type,
             name,
             value,
+            inheritable,
         } => {
-            let attr_value = value.unwrap_or_default();
+            let attr_value = value;
             
             let request = CreateAttributeRequest {
                 note_id: note_id.clone(),
                 attr_type: attr_type.clone(),
                 name: name.clone(),
                 value: attr_value,
-                is_inheritable: None,
+                is_inheritable: Some(inheritable),
                 position: None,
             };
 
@@ -44,9 +45,9 @@ pub async fn handle(command: AttributeCommands, config: &Config, output_format: 
             Ok(())
         }
 
-        AttributeCommands::Update { attribute_id, value } => {
+        AttributeCommands::Update { attribute_id, value, inheritable: _ } => {
             let request = UpdateAttributeRequest {
-                value: value.clone(),
+                value: value.unwrap_or_default(),
                 position: None,
             };
 
@@ -58,9 +59,11 @@ pub async fn handle(command: AttributeCommands, config: &Config, output_format: 
         AttributeCommands::Delete { attribute_id, force } => {
             if !force {
                 print!("Are you sure you want to delete attribute {}? [y/N] ", attribute_id);
-                io::stdout().flush().unwrap();
+                io::stdout().flush()
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).unwrap();
+                io::stdin().read_line(&mut input)
+                    .map_err(|e| crate::error::TriliumError::InputError(format!("Failed to read user input: {}", e)))?;
                 if !input.trim().eq_ignore_ascii_case("y") {
                     print_warning("Deletion cancelled");
                     return Ok(());

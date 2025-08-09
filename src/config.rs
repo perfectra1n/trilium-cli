@@ -2,17 +2,54 @@ use crate::error::{Result, TriliumError};
 use dirs::config_dir;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub server_url: String,
-    pub api_token: Option<String>,
+    pub api_token: Option<SecureString>,
     pub default_parent_id: String,
     pub default_note_type: String,
     pub editor: Option<String>,
     pub timeout_seconds: u64,
     pub max_retries: u32,
+}
+
+#[derive(Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop, PartialEq)]
+pub struct SecureString(String);
+
+impl SecureString {
+    pub fn new(s: String) -> Self {
+        SecureString(s)
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn from_string(s: String) -> Self {
+        SecureString(s)
+    }
+}
+
+impl std::fmt::Debug for SecureString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SecureString").field(&"[REDACTED]").finish()
+    }
+}
+
+impl From<String> for SecureString {
+    fn from(s: String) -> Self {
+        SecureString::new(s)
+    }
+}
+
+impl From<&str> for SecureString {
+    fn from(s: &str) -> Self {
+        SecureString::new(s.to_string())
+    }
 }
 
 impl Default for Config {
@@ -31,7 +68,7 @@ impl Default for Config {
 
 impl Config {
     pub fn load(path: Option<PathBuf>) -> Result<Self> {
-        let config_path = path.unwrap_or_else(|| Self::default_config_path());
+        let config_path = path.unwrap_or_else(Self::default_config_path);
 
         if !config_path.exists() {
             // Return default config if file doesn't exist
@@ -46,7 +83,7 @@ impl Config {
     }
 
     pub fn save(&self, path: Option<PathBuf>) -> Result<()> {
-        let config_path = path.unwrap_or_else(|| Self::default_config_path());
+        let config_path = path.unwrap_or_else(Self::default_config_path);
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = config_path.parent() {
@@ -77,66 +114,80 @@ impl Config {
         let mut config = Self::default();
 
         print!("Trilium server URL [{}]: ", config.server_url);
-        io::stdout().flush().unwrap();
+        io::stdout().flush()
+            .map_err(|e| TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
         let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read server URL: {}", e)))?;
         if !input.trim().is_empty() {
             config.server_url = input.trim().to_string();
         }
 
+        println!("\n⚠️  WARNING: API tokens are sensitive credentials!");
+        println!("   - They will be stored in plaintext in the config file");
+        println!("   - Ensure your config file has appropriate permissions (600)");
+        println!("   - Consider using environment variables for shared systems");
         print!("API token (ETAPI token from Trilium): ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()
+            .map_err(|e| TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
         input.clear();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read API token: {}", e)))?;
         if !input.trim().is_empty() {
-            config.api_token = Some(input.trim().to_string());
+            config.api_token = Some(SecureString::from(input.trim()));
         }
 
         print!("Default parent note ID [{}]: ", config.default_parent_id);
-        io::stdout().flush().unwrap();
+        io::stdout().flush()
+            .map_err(|e| TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
         input.clear();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read parent ID: {}", e)))?;
         if !input.trim().is_empty() {
             config.default_parent_id = input.trim().to_string();
         }
 
         print!("Default note type (text/code/book/etc.) [{}]: ", config.default_note_type);
-        io::stdout().flush().unwrap();
+        io::stdout().flush()
+            .map_err(|e| TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
         input.clear();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read note type: {}", e)))?;
         if !input.trim().is_empty() {
             config.default_note_type = input.trim().to_string();
         }
 
         print!("Text editor command (e.g., vim, nano, code) [system default]: ");
-        io::stdout().flush().unwrap();
+        io::stdout().flush()
+            .map_err(|e| TriliumError::InputError(format!("Failed to flush stdout: {}", e)))?;
         input.clear();
-        io::stdin().read_line(&mut input).unwrap();
+        io::stdin().read_line(&mut input)
+            .map_err(|e| TriliumError::InputError(format!("Failed to read editor: {}", e)))?;
         if !input.trim().is_empty() {
             config.editor = Some(input.trim().to_string());
         }
 
         config.save(None)?;
         println!("\nConfiguration saved to: {}", Self::default_config_path().display());
+        
+        // Set secure file permissions on Unix systems
+        #[cfg(unix)]
+        {
+            use std::fs::Permissions;
+            use std::os::unix::fs::PermissionsExt;
+            
+            let config_path = Self::default_config_path();
+            if let Err(e) = std::fs::set_permissions(&config_path, Permissions::from_mode(0o600)) {
+                eprintln!("⚠️  Warning: Failed to set secure permissions on config file: {}", e);
+                eprintln!("   Please manually set permissions: chmod 600 {}", config_path.display());
+            } else {
+                println!("✓ Set secure file permissions (600) on config file");
+            }
+        }
 
         Ok(config)
     }
 
-    pub fn validate(&self) -> Result<()> {
-        if self.server_url.is_empty() {
-            return Err(TriliumError::ConfigError("Server URL is required".to_string()));
-        }
-
-        // Validate URL format
-        url::Url::parse(&self.server_url)
-            .map_err(|e| TriliumError::ConfigError(format!("Invalid server URL: {}", e)))?;
-
-        Ok(())
-    }
-
-    pub fn get_auth_header(&self) -> Option<String> {
-        self.api_token.as_ref().map(|token| format!("{}", token))
-    }
 }
 
 #[cfg(test)]
@@ -164,7 +215,7 @@ mod tests {
         // Create a config with custom values
         let mut config = Config::default();
         config.server_url = "https://example.com".to_string();
-        config.api_token = Some("test_token_123".to_string());
+        config.api_token = Some(SecureString::from("test_token_123"));
         config.default_parent_id = "custom_root".to_string();
         config.timeout_seconds = 60;
 
@@ -176,7 +227,7 @@ mod tests {
 
         // Verify values
         assert_eq!(loaded_config.server_url, "https://example.com");
-        assert_eq!(loaded_config.api_token, Some("test_token_123".to_string()));
+        assert_eq!(loaded_config.api_token.as_ref().map(|s| s.as_str()), Some("test_token_123"));
         assert_eq!(loaded_config.default_parent_id, "custom_root");
         assert_eq!(loaded_config.timeout_seconds, 60);
     }
@@ -216,7 +267,7 @@ mod tests {
     fn test_config_serialization() {
         let config = Config {
             server_url: "https://notes.example.com".to_string(),
-            api_token: Some("secret_token".to_string()),
+            api_token: Some(SecureString::from("secret_token")),
             default_parent_id: "workspace".to_string(),
             default_note_type: "code".to_string(),
             editor: Some("vim".to_string()),
@@ -231,7 +282,8 @@ mod tests {
         let deserialized: Config = serde_yaml::from_str(&yaml).unwrap();
         
         assert_eq!(deserialized.server_url, config.server_url);
-        assert_eq!(deserialized.api_token, config.api_token);
+        assert_eq!(deserialized.api_token.as_ref().map(|s| s.as_str()), 
+                   config.api_token.as_ref().map(|s| s.as_str()));
         assert_eq!(deserialized.default_parent_id, config.default_parent_id);
         assert_eq!(deserialized.editor, config.editor);
         assert_eq!(deserialized.timeout_seconds, config.timeout_seconds);
@@ -249,7 +301,7 @@ api_token: "my_token"
         
         // Specified values should be set
         assert_eq!(config.server_url, "https://custom.server.com");
-        assert_eq!(config.api_token, Some("my_token".to_string()));
+        assert_eq!(config.api_token.as_ref().map(|s| s.as_str()), Some("my_token"));
         
         // Other values should use defaults from serde
         // Note: This requires #[serde(default)] on the struct fields
@@ -263,23 +315,4 @@ api_token: "my_token"
         assert!(default_path.to_string_lossy().contains("config.yaml"));
     }
 
-    #[test]
-    fn test_config_validation() {
-        let mut config = Config::default();
-        
-        // Valid config should pass
-        assert!(config.validate().is_ok());
-        
-        // Empty server URL should fail
-        config.server_url = "".to_string();
-        assert!(config.validate().is_err());
-        
-        // Invalid URL should fail
-        config.server_url = "not a valid url".to_string();
-        assert!(config.validate().is_err());
-        
-        // Valid URL should pass
-        config.server_url = "https://example.com:8080".to_string();
-        assert!(config.validate().is_ok());
-    }
 }

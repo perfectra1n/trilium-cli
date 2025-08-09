@@ -1,4 +1,4 @@
-use mockito::{mock, Mock, Matcher};
+use mockito::{Server, Matcher};
 use serde_json::json;
 
 mod common;
@@ -6,11 +6,20 @@ mod common;
 #[tokio::test]
 async fn test_full_note_lifecycle() {
     // Test the complete lifecycle of a note: create, read, update, delete
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock create note
-    let _create_mock = mock("POST", "/etapi/notes")
+    let _create_mock = server.mock("POST", "/etapi/create-note")
         .match_body(Matcher::Json(json!({
             "parentNoteId": "root",
             "title": "Test Note",
@@ -19,20 +28,20 @@ async fn test_full_note_lifecycle() {
         })))
         .with_status(201)
         .with_body(json!({
-            "note": {
-                "noteId": "new123",
-                "title": "Test Note",
-                "type": "text"
-            },
-            "branch": {
-                "branchId": "branch123",
-                "parentNoteId": "root"
-            }
+            "noteId": "new123",
+            "title": "Test Note",
+            "type": "text",
+            "mime": "text/html",
+            "isProtected": false,
+            "dateCreated": "2024-01-01T00:00:00.000Z",
+            "dateModified": "2024-01-01T00:00:00.000Z",
+            "utcDateCreated": "2024-01-01T00:00:00.000Z",
+            "utcDateModified": "2024-01-01T00:00:00.000Z"
         }).to_string())
-        .create();
+        .create_async().await;
 
     // Mock get note
-    let _get_mock = mock("GET", "/etapi/notes/new123")
+    let _get_mock = server.mock("GET", "/etapi/notes/new123")
         .with_status(200)
         .with_body(json!({
             "noteId": "new123",
@@ -45,18 +54,19 @@ async fn test_full_note_lifecycle() {
             "utcDateCreated": "2024-01-01T00:00:00.000Z",
             "utcDateModified": "2024-01-01T00:00:00.000Z"
         }).to_string())
-        .create();
+        .create_async().await;
 
     // Mock update content
-    let _update_mock = mock("PUT", "/etapi/notes/new123/content")
+    let _update_mock = server.mock("PUT", "/etapi/notes/new123/content")
         .match_body("Updated content")
         .with_status(204)
-        .create();
+        .create_async().await;
 
     // Mock delete note
-    let _delete_mock = mock("DELETE", "/etapi/notes/new123")
-        .with_status(204)
-        .create();
+    let _delete_mock = server.mock("DELETE", "/etapi/notes/new123")
+        .with_status(200)
+        .with_body(json!({}).to_string())
+        .create_async().await;
 
     // Execute lifecycle
     let create_request = trilium_cli::models::CreateNoteRequest {
@@ -68,7 +78,7 @@ async fn test_full_note_lifecycle() {
     };
 
     let created = client.create_note(create_request).await.unwrap();
-    assert_eq!(created.note.note_id, "new123");
+    assert_eq!(created.note_id, "new123");
 
     let fetched = client.get_note("new123").await.unwrap();
     assert_eq!(fetched.title, "Test Note");
@@ -80,10 +90,19 @@ async fn test_full_note_lifecycle() {
 
 #[tokio::test]
 async fn test_search_with_pagination() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
-    let _mock = mock("GET", "/etapi/notes")
+    let _mock = server.mock("GET", "/etapi/notes")
         .match_query(Matcher::AllOf(vec![
             Matcher::UrlEncoded("search".into(), "test query".into()),
             Matcher::UrlEncoded("limit".into(), "10".into()),
@@ -91,29 +110,38 @@ async fn test_search_with_pagination() {
         .with_status(200)
         .with_body(json!({
             "results": [
-                {"noteId": "1", "title": "Result 1", "score": 0.9},
-                {"noteId": "2", "title": "Result 2", "score": 0.8},
-                {"noteId": "3", "title": "Result 3", "score": 0.7},
+                {"noteId": "1", "title": "Result 1", "path": "path1", "score": 0.9},
+                {"noteId": "2", "title": "Result 2", "path": "path2", "score": 0.8},
+                {"noteId": "3", "title": "Result 3", "path": "path3", "score": 0.7}
             ]
         }).to_string())
-        .create();
+        .create_async().await;
 
-    let results = client.search_notes("test query", Some(10)).await.unwrap();
-    assert_eq!(results.results.len(), 3);
+    let results = client.search_notes("test query", false, false, 10).await.unwrap();
+    assert_eq!(results.len(), 3);
 }
 
 #[tokio::test]
 async fn test_attachment_operations() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock get attachments
-    let _list_mock = mock("GET", "/etapi/notes/note123/attachments")
+    let _list_mock = server.mock("GET", "/etapi/notes/note123/attachments")
         .with_status(200)
         .with_body(json!([
             {
                 "attachmentId": "attach1",
-                "parentId": "note123",
+                "ownerId": "note123",
                 "title": "file1.pdf",
                 "role": "file",
                 "mime": "application/pdf",
@@ -125,7 +153,7 @@ async fn test_attachment_operations() {
             },
             {
                 "attachmentId": "attach2",
-                "parentId": "note123",
+                "ownerId": "note123",
                 "title": "file2.txt",
                 "role": "file",
                 "mime": "text/plain",
@@ -136,7 +164,7 @@ async fn test_attachment_operations() {
                 "contentLength": 256
             }
         ]).to_string())
-        .create();
+        .create_async().await;
 
     let attachments = client.get_note_attachments("note123").await.unwrap();
     assert_eq!(attachments.len(), 2);
@@ -146,11 +174,20 @@ async fn test_attachment_operations() {
 
 #[tokio::test]
 async fn test_attribute_management() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock create attribute
-    let _create_mock = mock("POST", "/etapi/attributes")
+    let _create_mock = server.mock("POST", "/etapi/attributes")
         .match_body(Matcher::Json(json!({
             "noteId": "note123",
             "type": "label",
@@ -169,10 +206,10 @@ async fn test_attribute_management() {
             "isDeleted": false,
             "utcDateModified": "2024-01-01T00:00:00.000Z"
         }).to_string())
-        .create();
+        .create_async().await;
 
     // Mock get attributes
-    let _get_mock = mock("GET", "/etapi/notes/note123/attributes")
+    let _get_mock = server.mock("GET", "/etapi/notes/note123/attributes")
         .with_status(200)
         .with_body(json!([
             {
@@ -187,7 +224,7 @@ async fn test_attribute_management() {
                 "utcDateModified": "2024-01-01T00:00:00.000Z"
             }
         ]).to_string())
-        .create();
+        .create_async().await;
 
     let request = trilium_cli::models::CreateAttributeRequest {
         note_id: "note123".to_string(),
@@ -208,32 +245,41 @@ async fn test_attribute_management() {
 
 #[tokio::test]
 async fn test_error_handling() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock 404 error
-    let _mock_404 = mock("GET", "/etapi/notes/nonexistent")
+    let _mock_404 = server.mock("GET", "/etapi/notes/nonexistent")
         .with_status(404)
         .with_body("Note not found")
-        .create();
+        .create_async().await;
 
     let result = client.get_note("nonexistent").await;
     assert!(result.is_err());
     
     // Mock 401 error
-    let _mock_401 = mock("GET", "/etapi/app-info")
+    let _mock_401 = server.mock("GET", "/etapi/app-info")
         .with_status(401)
         .with_body("Unauthorized")
-        .create();
+        .create_async().await;
 
     let result = client.get_app_info().await;
     assert!(result.is_err());
 
     // Mock 500 error
-    let _mock_500 = mock("POST", "/etapi/notes")
+    let _mock_500 = server.mock("POST", "/etapi/notes")
         .with_status(500)
         .with_body("Internal server error")
-        .create();
+        .create_async().await;
 
     let request = trilium_cli::models::CreateNoteRequest {
         parent_note_id: "root".to_string(),
@@ -249,48 +295,70 @@ async fn test_error_handling() {
 
 #[tokio::test]
 async fn test_calendar_operations() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock get calendar note
-    let _get_mock = mock("GET", "/etapi/calendar/days/2024-01-15")
+    let _get_mock = server.mock("GET", "/etapi/calendar/days/2024-01-15")
         .with_status(200)
         .with_body(json!({
-            "noteId": "cal123",
-            "title": "2024-01-15",
-            "dateCreated": "2024-01-15T00:00:00.000Z"
+            "dateNoteId": "cal123",
+            "monthNoteId": "month123",
+            "yearNoteId": "year123",
+            "weekNoteId": "week123",
+            "exists": true
         }).to_string())
-        .create();
+        .create_async().await;
 
     // Mock create calendar note
-    let _create_mock = mock("POST", "/etapi/calendar/days/2024-01-16")
+    let _create_mock = server.mock("POST", "/etapi/calendar/days/2024-01-16")
         .with_status(201)
         .with_body(json!({
-            "noteId": "cal124",
-            "title": "2024-01-16",
-            "dateCreated": "2024-01-16T00:00:00.000Z"
+            "dateNoteId": "cal124",
+            "monthNoteId": "month124",
+            "yearNoteId": "year124",
+            "weekNoteId": "week124",
+            "exists": true
         }).to_string())
-        .create();
+        .create_async().await;
 
     let existing = client.get_calendar_note("2024-01-15").await.unwrap();
-    assert_eq!(existing.note_id, "cal123");
+    assert_eq!(existing.date_note_id, "cal123");
 
     let created = client.create_calendar_note("2024-01-16").await.unwrap();
-    assert_eq!(created.note_id, "cal124");
+    assert_eq!(created.date_note_id, "cal124");
 }
 
 #[tokio::test]
 async fn test_backup_creation() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
-    let _mock = mock("PUT", "/etapi/backup")
+    let _mock = server.mock("PUT", "/etapi/backup")
         .match_query(Matcher::UrlEncoded("backupName".into(), "test_backup".into()))
         .with_status(200)
         .with_body(json!({
             "backupName": "test_backup_2024_01_01.db"
         }).to_string())
-        .create();
+        .create_async().await;
 
     let backup_name = client.create_backup(Some("test_backup".to_string())).await.unwrap();
     assert!(backup_name.contains("test_backup"));
@@ -298,11 +366,20 @@ async fn test_backup_creation() {
 
 #[tokio::test]
 async fn test_branch_operations() {
-    let config = common::test_config();
+    let mut server = Server::new_async().await;
+    let config = trilium_cli::config::Config {
+        server_url: server.url(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
+        default_parent_id: "root".to_string(),
+        default_note_type: "text".to_string(),
+        editor: None,
+        timeout_seconds: 30,
+        max_retries: 3,
+    };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
     // Mock get branches
-    let _get_mock = mock("GET", "/etapi/notes/note123/branches")
+    let _get_mock = server.mock("GET", "/etapi/notes/note123/branches")
         .with_status(200)
         .with_body(json!([
             {
@@ -315,10 +392,10 @@ async fn test_branch_operations() {
                 "utcDateModified": "2024-01-01T00:00:00.000Z"
             }
         ]).to_string())
-        .create();
+        .create_async().await;
 
     // Mock create branch
-    let _create_mock = mock("POST", "/etapi/branches")
+    let _create_mock = server.mock("POST", "/etapi/branches")
         .match_body(Matcher::Json(json!({
             "noteId": "note123",
             "parentNoteId": "folder456"
@@ -332,7 +409,7 @@ async fn test_branch_operations() {
             "isExpanded": false,
             "utcDateModified": "2024-01-01T00:00:00.000Z"
         }).to_string())
-        .create();
+        .create_async().await;
 
     let branches = client.get_note_branches("note123").await.unwrap();
     assert_eq!(branches.len(), 1);

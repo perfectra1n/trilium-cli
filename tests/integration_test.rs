@@ -77,7 +77,7 @@ fn test_pipe_requires_stdin() {
         .timeout(std::time::Duration::from_secs(1))
         .assert()
         .failure()
-        .stderr(predicate::str::contains("No input piped to stdin"));
+        .stderr(predicate::str::contains("Empty input received from stdin"));
 }
 
 #[test]

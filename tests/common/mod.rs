@@ -1,6 +1,5 @@
 use chrono::Utc;
 use serde_json::json;
-use std::collections::HashMap;
 
 // Test fixture data
 pub mod fixtures {
@@ -230,11 +229,11 @@ impl MockStdin {
     }
 }
 
-// Test configuration helper
+// Test configuration helper (for unit tests only)
 pub fn test_config() -> trilium_cli::config::Config {
     trilium_cli::config::Config {
-        server_url: mockito::server_url(),
-        api_token: Some("test_token".to_string()),
+        server_url: "http://localhost:8080".to_string(),
+        api_token: Some(trilium_cli::config::SecureString::from("test_token")),
         default_parent_id: "root".to_string(),
         default_note_type: "text".to_string(),
         editor: None,
