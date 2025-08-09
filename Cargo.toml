@@ -1,0 +1,93 @@
+[package]
+name = "trilium-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <you@example.com>"]
+description = "A CLI and TUI client for Trilium Notes"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/yourusername/trilium-cli"
+keywords = ["trilium", "notes", "cli", "tui"]
+categories = ["command-line-utilities"]
+
+[lib]
+name = "trilium_cli"
+path = "src/lib.rs"
+
+[dependencies]
+# CLI argument parsing
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+
+# TUI framework
+ratatui = "0.26"
+crossterm = "0.27"
+
+# Async runtime
+tokio = { version = "1.38", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Configuration
+config = "0.14"
+dirs = "5.0"
+
+# Date/time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# Terminal colors
+colored = "2.1"
+
+# Text editing
+tempfile = "3.10"
+edit = "0.1"
+
+# Base64 encoding
+base64 = "0.22"
+
+# Table formatting for CLI output
+comfy-table = "7.1"
+
+# Progress indicators
+indicatif = "0.17"
+
+# URL handling
+url = "2.5"
+
+# MIME type detection
+mime_guess = "2.0"
+
+# HTML parsing
+html2md = "0.2"
+scraper = "0.18"
+
+# Regular expressions
+regex = "1.10"
+
+# Stdin detection
+atty = "0.2"
+
+[dev-dependencies]
+# Testing utilities
+mockito = "1.4"
+assert_cmd = "2.0"
+predicates = "3.1"
+tempfile = "3.10"
+pretty_assertions = "1.4"
+
+[[bin]]
+name = "trilium"
+path = "src/main.rs"
