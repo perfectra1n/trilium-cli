@@ -1,21 +1,62 @@
 # Trilium CLI
 
-A powerful command-line interface and terminal user interface (TUI) for interacting with [Trilium Notes](https://github.com/zadam/trilium) instances.
+![Build Status](https://img.shields.io/badge/build-passing-brightgreen)
+![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Rust](https://img.shields.io/badge/rust-1.70%2B-orange)
 
-## Features
+A powerful command-line interface and terminal user interface (TUI) for [Trilium Notes](https://github.com/zadam/trilium) with advanced navigation, content management, and interoperability features.
 
-- **Comprehensive CLI**: Full support for all Trilium ETAPI operations
-- **Interactive TUI**: Browse and manage notes with an intuitive terminal interface
-- **Note Management**: Create, read, update, and delete notes
-- **Tree Navigation**: Navigate the note hierarchy with expandable/collapsible tree view
-- **Search**: Fast and flexible note searching capabilities
-- **Attributes & Attachments**: Manage note attributes and file attachments
-- **Import/Export**: Import and export notes in various formats
-- **Calendar Integration**: Create and manage calendar notes
-- **Backup**: Create database backups
-- **Configuration Management**: Store server URL and API tokens for easy access
+## ✨ Features Overview
 
-## Installation
+### 🖥️ **Core CLI Operations**
+- Complete ETAPI coverage for all Trilium operations
+- Note management (create, read, update, delete, list)
+- Search with highlighting and context
+- Attachment and attribute management
+- Backup and calendar operations
+- Multiple output formats (table, JSON, plain text)
+
+### 🔍 **Enhanced TUI Navigation**
+- **Fuzzy Search**: Real-time search with `/` key and highlighted matches
+- **Vim-like Keybindings**: Navigate with `hjkl`, `g`/`G` for top/bottom
+- **Recent Notes**: Quick access with `R` key, automatic tracking
+- **Bookmarks System**: Toggle with `b`, view with `B`, persistent storage
+- **Split Panes**: Toggle with `s`, resize with `<>`/`>`, dual focus
+
+### 📝 **Content Management**
+- **Wiki-style Links**: `[[note-id]]` and `[[Note Title]]` syntax with validation
+- **Hierarchical Tags**: `#project/work/urgent` organization with search
+- **Enhanced Search**: Regex patterns, context lines, result highlighting
+- **Note Templates**: Variables like `{{title}}`, `{{date}}` with built-in templates
+- **Quick Capture**: Rapid note creation with auto-formatting and inbox mode
+
+### 🔄 **Import/Export Extensions**
+- **Obsidian Vault**: Full import/export with wikilink and frontmatter support
+- **Notion Database**: ZIP import with block parsing and property mapping
+- **Directory Import**: Bulk import with pattern matching and duplicate handling
+- **Git Integration**: Bidirectional sync, branch management, version control
+
+### 🛠️ **Developer Experience**
+- **Configuration Profiles**: Multiple Trilium instances support
+- **Progress Indicators**: Real-time progress bars for long operations
+- **Enhanced Error Messages**: Detailed errors with suggestions
+- **Shell Completion**: Bash, Zsh, Fish completion support
+- **Plugin Architecture**: Extensible system for custom functionality
+
+### 🔧 **Pipe Functionality**
+- **Smart Format Detection**: Auto-detect Markdown, HTML, JSON, code
+- **Content Processing**: Title extraction, tag detection, batch mode
+- **Template Integration**: Use templates with piped content
+- **Shell Workflows**: Seamless integration with Unix tools
+
+## 📦 Installation
+
+### Prerequisites
+
+- **Rust 1.70+**: [Install Rust](https://rustup.rs/)
+- **Trilium Notes**: Running instance with ETAPI enabled
+- **ETAPI Token**: Generated from your Trilium instance
 
 ### From Source
 
@@ -26,32 +67,36 @@ cd trilium-cli
 
 # Build and install
 cargo install --path .
+
+# Or build for development
+cargo build --release
 ```
 
-### Prerequisites
+### Generate ETAPI Token
 
-- Rust 1.70 or higher
-- A running Trilium instance with ETAPI enabled
-- An ETAPI token from your Trilium instance
+1. Open Trilium Notes
+2. Go to Options → ETAPI
+3. Click "Create new token"
+4. Copy the generated token
+5. Note your server URL (default: `http://localhost:9999`)
 
-## Configuration
+## ⚙️ Configuration
 
-### Initial Setup
-
-Run the configuration wizard:
+### Quick Setup
 
 ```bash
+# Run configuration wizard
 trilium config init
 ```
 
-This will prompt you for:
+This will prompt for:
 - Trilium server URL
 - ETAPI token
-- Default settings
+- Default settings and preferences
 
 ### Manual Configuration
 
-The configuration file is stored at `~/.config/trilium-cli/config.yaml`:
+Configuration file: `~/.config/trilium-cli/config.yaml`
 
 ```yaml
 server_url: http://localhost:9999
@@ -61,22 +106,56 @@ default_note_type: text
 editor: vim
 timeout_seconds: 30
 max_retries: 3
+
+# Enhanced features
+max_recent_notes: 15
+templates_folder: templates
+quick_capture:
+  auto_title: true
+  extract_tags: true
+  batch_delimiter: "---"
+
+# Import/Export settings
+import_export:
+  max_file_size_mb: 100
+  batch_size: 50
+  preserve_timestamps: true
+  handle_duplicates: rename
 ```
 
 ### Environment Variables
 
-You can override configuration with environment variables:
+Override configuration with environment variables:
 
 ```bash
 export TRILIUM_SERVER_URL=http://localhost:9999
 export TRILIUM_API_TOKEN=your_token_here
+export TRILIUM_DEFAULT_PARENT=root
 ```
 
-## Usage
+### Configuration Profiles
+
+Manage multiple Trilium instances:
+
+```bash
+# Create profiles for different instances
+trilium profile create work --server http://work-trilium:9999 --token work_token
+trilium profile create personal --server http://personal:9999 --token personal_token
+
+# Use specific profile
+trilium --profile work search "project"
+trilium --profile personal note create "Personal Note"
+
+# List and manage profiles
+trilium profile list
+trilium profile set-default work
+```
+
+## 🚀 Usage
 
 ### Interactive TUI Mode
 
-Launch the interactive terminal interface:
+Launch the powerful terminal interface:
 
 ```bash
 trilium tui
@@ -84,343 +163,409 @@ trilium tui
 trilium
 ```
 
-#### TUI Keyboard Shortcuts
+#### TUI Navigation
 
-- `↑/↓` or `j/k` - Navigate tree
-- `←/→` or `h/l` - Collapse/Expand nodes
-- `Enter` - Load selected note
-- `Tab` - Switch view mode
-- `/` - Search notes
-- `:` - Command mode
-- `n` - Create new note
-- `e` - Edit note
-- `d` - Delete note
-- `r` - Refresh tree
-- `q` - Quit
+```
+┌─ Navigation ─────────────────────────────────────────────┐
+│ j/k or ↑/↓    Navigate up/down                          │
+│ h/l or ←/→    Navigate left/right or collapse/expand    │
+│ g/G           Go to top/bottom                          │
+│ o/Enter       Open note                                 │
+│ c             Collapse current                          │
+├─ Search & Filtering ──────────────────────────────────────│
+│ /             Fuzzy search mode                         │
+│ n/N           Next/Previous search match                │
+├─ Quick Access ────────────────────────────────────────────│
+│ R             Recent notes                              │
+│ B             Bookmarks view                            │
+│ b             Toggle bookmark                           │
+├─ Views & Layout ──────────────────────────────────────────│
+│ s             Toggle split view                         │
+│ </> Decrease/increase left pane                         │
+│ Tab           Cycle view modes                          │
+├─ General ─────────────────────────────────────────────────│
+│ r             Refresh                                   │
+│ q             Quit                                      │
+│ ?             Show help                                 │
+└───────────────────────────────────────────────────────────┘
+```
+
+#### Enhanced Features
+
+- **Fuzzy Search**: Press `/` and start typing for real-time filtered results
+- **Split View**: Press `s` to see tree and content simultaneously
+- **Bookmarks**: Star important notes with `b`, access quickly with `B`
+- **Recent Notes**: Press `R` to see recently accessed notes with timestamps
 
 ### CLI Commands
-
-#### Piping Input
-
-The CLI provides powerful piping functionality to create notes from any input source:
-
-```bash
-# Basic piping - auto-detects format
-echo "Hello World" | trilium pipe
-
-# Pipe with custom title
-echo "Note content" | trilium pipe --title "My Note"
-
-# Pipe markdown content
-cat README.md | trilium pipe --format markdown
-
-# Pipe HTML and convert to markdown
-curl https://example.com | trilium pipe --format html --strip-html
-
-# Pipe JSON with formatting
-curl https://api.example.com/data | trilium pipe --format json
-
-# Pipe code with syntax detection
-cat script.py | trilium pipe --format code --language python
-
-# Pipe to specific parent note
-echo "Child content" | trilium pipe --parent <parent-id>
-
-# Add tags and labels
-echo "Tagged content" | trilium pipe --tags "important,todo" --labels "project-x"
-
-# Add custom attributes
-echo "Content" | trilium pipe -a "priority=high" -a "status=draft"
-
-# Append to existing note
-echo "Additional content" | trilium pipe --append-to <note-id>
-
-# Use template for formatting
-echo "Raw data" | trilium pipe --template <template-note-id>
-
-# Batch mode - create multiple notes
-cat multi-doc.txt | trilium pipe --batch-delimiter "---" --title "Part"
-
-# Quiet mode - only output note IDs
-echo "Content" | trilium pipe --quiet
-
-# Complex example: pipe from clipboard with attributes
-pbpaste | trilium pipe \
-  --title "Clipboard Note" \
-  --tags "clipboard,temp" \
-  --labels "review" \
-  --format auto \
-  --parent daily-notes
-```
-
-##### Format Detection
-
-The pipe command automatically detects content format:
-
-- **Markdown**: Headers (#), links, lists, code blocks
-- **HTML**: DOCTYPE, common HTML tags
-- **JSON**: Valid JSON structure
-- **Code**: Shebangs, import statements, syntax patterns
-- **Plain Text**: Default fallback
-
-You can override detection with `--format`:
-- `auto` (default): Auto-detect format
-- `markdown` or `md`: Markdown content
-- `html`: HTML content
-- `json`: JSON data
-- `code`: Source code (use `--language` for hint)
-- `text`: Plain text
-
-##### Batch Mode
-
-Create multiple notes from delimited input:
-
-```bash
-# Split by custom delimiter
-cat <<EOF | trilium pipe --batch-delimiter "===" --title "Section"
-First note content
-===
-Second note content
-===
-Third note content
-EOF
-
-# Process multiple JSON objects
-cat data.jsonl | trilium pipe --batch-delimiter "\n" --format json
-```
-
-##### Template Support
-
-Use template notes to wrap piped content:
-
-```bash
-# Create a template note first with {{content}} placeholder
-echo "# Daily Log\nDate: {{date}}\n\n{{content}}" | trilium note create "Template"
-
-# Use template when piping
-echo "Today's activities..." | trilium pipe --template <template-id>
-```
-
-##### Common Use Cases
-
-```bash
-# Save command output as note
-ls -la | trilium pipe --title "Directory Listing" --format code --language bash
-
-# Archive web page
-curl -s https://example.com/article | trilium pipe --format html --strip-html
-
-# Save API response
-curl -s https://api.github.com/user/repos | trilium pipe --format json
-
-# Create note from file
-cat document.md | trilium pipe --format markdown
-
-# Save clipboard (macOS)
-pbpaste | trilium pipe --title "Clipboard $(date +%Y-%m-%d)"
-
-# Save clipboard (Linux)
-xclip -o | trilium pipe --title "Clipboard $(date +%Y-%m-%d)"
-
-# Pipe from another command with jq processing
-curl -s https://api.example.com | jq '.data' | trilium pipe --format json
-
-# Create daily journal entry
-echo "$(date)\n\nToday's thoughts..." | trilium pipe \
-  --title "Journal $(date +%Y-%m-%d)" \
-  --parent journal \
-  --tags "daily,journal"
-
-# Save error logs
-./script.sh 2>&1 | trilium pipe --title "Script Errors" --format code
-
-# Chain with grep
-grep ERROR /var/log/app.log | trilium pipe --title "Error Log" --format text
-```
-
-##### Stdin Support in Note Create
-
-The `note create` command also supports stdin when no content is provided:
-
-```bash
-# Create note from piped input
-echo "Note content" | trilium note create "My Note"
-
-# Pipe file content
-cat file.txt | trilium note create "File Content" --parent <parent-id>
-```
 
 #### Note Operations
 
 ```bash
-# Create a note
+# Create notes
 trilium note create "My Note Title" --content "Note content" --parent root
+trilium note create "My Note" --edit  # Edit in external editor
+echo "Note content" | trilium note create "My Note"  # From stdin
 
-# Create and edit in external editor
-trilium note create "My Note" --edit
-
-# Get note details
+# Read notes
 trilium note get <note-id>
 trilium note get <note-id> --content  # Include content
 
-# Update note
+# Update notes
 trilium note update <note-id> --title "New Title" --content "New content"
 trilium note update <note-id> --edit  # Edit in external editor
 
-# Delete note
+# Delete notes
 trilium note delete <note-id>
 trilium note delete <note-id> --force  # Skip confirmation
 
-# List child notes
+# List notes
 trilium note list
 trilium note list <parent-id> --tree --depth 3
-
-# Export note
-trilium note export <note-id> --format markdown --output note.md
-trilium note export <note-id> --format html --output note.html
-
-# Import note
-trilium note import file.md --parent root --format markdown
 ```
 
-#### Search
+#### Advanced Search
 
 ```bash
-# Search notes
+# Basic search
 trilium search "query"
 trilium search "query" --limit 100 --fast --archived
+
+# Advanced search with highlighting
+trilium search "pattern" --regex --context 3 --content --highlight
+
+# Search options
+trilium search "query" \
+    --regex \              # Enable regex mode
+    --context 3 \          # Show 3 context lines around matches
+    --content \            # Include note content in search
+    --highlight \          # Highlight search terms
+    --fast \               # Enable fast search
+    --archived             # Include archived notes
 
 # Output formats
 trilium search "query" --output json
 trilium search "query" --output table
 ```
 
-#### Branches
+#### Pipe Functionality
+
+The pipe command provides powerful content processing:
 
 ```bash
-# Create branch (clone note to another location)
-trilium branch create <note-id> <parent-id>
+# Basic piping with auto-format detection
+echo "Hello World" | trilium pipe
+cat README.md | trilium pipe --title "Documentation"
 
-# Get branch info
-trilium branch get <branch-id>
+# Format-specific processing
+curl https://example.com | trilium pipe --format html --strip-html
+curl https://api.example.com/data | trilium pipe --format json
+cat script.py | trilium pipe --format code --language python
 
-# Update branch
-trilium branch update <branch-id> --prefix "Prefix: "
+# Advanced options
+echo "Content" | trilium pipe \
+    --title "My Note" \
+    --tags "important,todo" \
+    --labels "project-x" \
+    --parent <parent-id> \
+    -a "priority=high" \
+    -a "status=draft"
 
-# Delete branch
-trilium branch delete <branch-id>
+# Batch mode - create multiple notes
+cat multi-doc.txt | trilium pipe --batch-delimiter "---" --title "Part"
+
+# Template integration
+echo "Content" | trilium pipe --template <template-note-id>
+
+# Append to existing note
+echo "Additional content" | trilium pipe --append-to <note-id>
 ```
 
-#### Attributes
+##### Pipe Use Cases
 
 ```bash
-# Create attribute
-trilium attribute create <note-id> --type label "myLabel"
-trilium attribute create <note-id> --type relation "myRelation" --value <target-note-id>
+# Save command output
+ls -la | trilium pipe --title "Directory Listing" --format code --language bash
 
-# List attributes
+# Archive web content
+curl -s https://example.com/article | trilium pipe --format html --strip-html
+
+# Daily journal
+echo "$(date)\n\nToday's thoughts..." | trilium pipe \
+    --title "Journal $(date +%Y-%m-%d)" \
+    --parent journal \
+    --tags "daily,journal"
+
+# System monitoring
+(echo "# System Status - $(date)" && df -h && free -h) | \
+    trilium pipe --title "System Status" --format code
+```
+
+#### Wiki-style Links
+
+```bash
+# Show backlinks to a note
+trilium link backlinks <note-id> --context
+
+# Show outgoing links from a note
+trilium link outgoing <note-id>
+
+# Find and fix broken links
+trilium link broken --fix
+trilium link broken <note-id>
+
+# Update links in bulk
+trilium link update <old-target> <new-target> --dry-run
+trilium link update <old-target> <new-target>
+
+# Validate all links
+trilium link validate <note-id>
+```
+
+#### Hierarchical Tags
+
+```bash
+# List tags with hierarchy
+trilium tag list --tree --counts
+trilium tag list --pattern "project/*"
+
+# Search by tags
+trilium tag search "project/work" --include-children
+trilium tag search "#urgent" --limit 50
+
+# Tag management
+trilium tag add <note-id> "project/work/urgent"
+trilium tag remove <note-id> "project/work"
+trilium tag rename "old-tag" "new-tag" --dry-run
+
+# Tag visualization
+trilium tag cloud --min-count 5 --max-tags 50
+```
+
+#### Note Templates
+
+```bash
+# List available templates
+trilium template list --detailed
+
+# Create template
+trilium template create "Daily Journal" --edit
+trilium template create "Meeting Notes" --content "# Meeting\n\nDate: {{date}}\nAttendees: {{custom:attendees}}"
+
+# Use templates
+trilium template use "Daily Journal" --interactive
+trilium template use "Meeting Notes" --parent meetings --edit
+
+# Template management
+trilium template show <template> --variables
+trilium template update <template-id> --edit
+trilium template delete <template-id>
+trilium template validate <template>
+```
+
+#### Quick Capture
+
+```bash
+# Quick note creation
+trilium quick "Meeting notes from today" --tags "work,meeting"
+echo "Task: Buy groceries" | trilium quick --tags "personal,todo"
+
+# Batch processing
+trilium quick --batch "---" < multi-note-file.txt
+
+# Format-specific capture
+trilium quick --format json < data.json
+trilium quick --format todo < task-list.txt
+
+# Options
+trilium quick [content] \
+    --title "Custom Title" \
+    --tags "tag1,tag2" \
+    --format auto \
+    --batch "---" \
+    --quiet \
+    --inbox <note-id>
+```
+
+### Import/Export Operations
+
+#### Obsidian Integration
+
+```bash
+# Import entire Obsidian vault
+trilium import-obsidian ~/Documents/MyVault --parent root
+trilium import-obsidian ~/Documents/MyVault --parent root --dry-run
+
+# Export to Obsidian format
+trilium export-obsidian <note-id> ~/exports/obsidian-vault
+trilium export-obsidian <note-id> ~/exports/obsidian-vault --dry-run
+```
+
+Features:
+- Preserves folder structure as note hierarchy
+- Converts wikilinks to proper markdown links
+- Processes YAML frontmatter as note attributes
+- Handles attachments and images
+- Converts Obsidian tags to Trilium tags
+
+#### Notion Integration
+
+```bash
+# Import Notion export (ZIP)
+trilium import-notion ~/Downloads/notion_export.zip --parent notion-notes
+trilium import-notion ~/Downloads/notion_export.zip --dry-run
+
+# Export to Notion format
+trilium export-notion <note-id> ~/exports/notion-format
+trilium export-notion <note-id> ~/exports/notion-format --dry-run
+```
+
+Features:
+- Handles Notion ZIP exports
+- Converts blocks (text, headings, lists, code, tables)
+- Maps Notion properties to Trilium attributes
+- Preserves hierarchical structure
+- Handles callouts and toggles
+
+#### Directory Bulk Import
+
+```bash
+# Import directory with filtering
+trilium import-dir ~/Documents/Notes --patterns "*.md" "*.txt" --max-depth 3
+trilium import-dir ~/Documents/Notes --parent archive --dry-run
+
+# Advanced options
+trilium import-dir ~/Archives \
+    --parent archive_root \
+    --max-depth 5 \
+    --patterns "*.md" "*.txt" "*.json" \
+    --exclude "*.tmp" \
+    --max-size 50MB
+```
+
+Features:
+- Recursive directory traversal with depth control
+- Glob pattern matching for file filtering
+- Automatic format detection
+- Duplicate handling strategies
+- Progress tracking with file counts
+- Batch processing for large imports
+
+#### Git Integration
+
+```bash
+# Export notes to git repository
+trilium sync-git ~/notes-repo --operation export --branch main
+
+# Import from git repository
+trilium sync-git ~/existing-notes --operation import --parent imported_notes
+
+# Bidirectional sync
+trilium sync-git ~/notes-repo --note-id projects --operation sync
+
+# Branch-specific operations
+trilium sync-git ~/repo --operation export --branch feature-branch --dry-run
+```
+
+Features:
+- Bidirectional synchronization
+- Branch management and switching
+- Commit history tracking
+- Conflict detection and resolution
+- Remote repository integration
+- Frontmatter generation with metadata
+
+#### Attributes & Relationships
+
+```bash
+# Create attributes
+trilium attribute create <note-id> --type label "important"
+trilium attribute create <note-id> --type relation "child-of" --value <parent-note-id>
+
+# List and manage
 trilium attribute list <note-id>
-
-# Update attribute
-trilium attribute update <attribute-id> "new value"
-
-# Delete attribute
+trilium attribute update <attribute-id> "new-value"
 trilium attribute delete <attribute-id>
 ```
 
 #### Attachments
 
 ```bash
-# Upload attachment
-trilium attachment upload <note-id> file.pdf
+# Upload attachments
+trilium attachment upload <note-id> document.pdf
 trilium attachment upload <note-id> image.png --title "Screenshot"
 
-# Download attachment
-trilium attachment download <attachment-id>
+# Download and manage
 trilium attachment download <attachment-id> --output custom-name.pdf
-
-# List attachments
 trilium attachment list <note-id>
-
-# Delete attachment
 trilium attachment delete <attachment-id>
 ```
 
 #### Other Operations
 
 ```bash
-# Create backup
-trilium backup
+# Branches (note cloning)
+trilium branch create <note-id> <parent-id>
+trilium branch update <branch-id> --prefix "Copy: "
+trilium branch delete <branch-id>
+
+# Calendar integration
+trilium calendar 2024-01-15  # Create/get calendar note
+trilium calendar today       # Today's calendar note
+
+# Backups
 trilium backup --name "manual-backup-2024"
 
-# Calendar operations
-trilium calendar 2024-01-15  # Create/get calendar note for date
-
-# Show server info
+# Server information
 trilium info
-
-# Configuration management
-trilium config show
-trilium config set server_url http://new-server:9999
-trilium config set api_token new_token
 ```
 
 ### Output Formats
 
-Most commands support multiple output formats:
+All commands support multiple output formats:
 
 ```bash
 --output table  # Default - formatted table
---output json   # JSON output for scripting
---output plain  # Simple text output
+--output json   # JSON for scripting
+--output plain  # Simple text for piping
 ```
 
 ### Global Options
 
 ```bash
---config <path>           # Use alternative config file
+--config <path>           # Alternative config file
+--profile <name>          # Use specific profile
 --server-url <url>        # Override server URL
 --api-token <token>       # Override API token
 --verbose                 # Enable debug logging
+--quiet                   # Suppress non-essential output
+--timeout <seconds>       # Request timeout
 ```
 
-## Examples
+## 🔧 Advanced Examples
 
-### Scripting Example
+### Automation Scripts
+
+#### Daily Workflow
 
 ```bash
 #!/bin/bash
 
-# Create daily journal note
+# Create daily journal from template
 DATE=$(date +%Y-%m-%d)
-CONTENT="# Daily Journal - $DATE\n\n## Tasks\n- [ ] \n\n## Notes\n"
+NOTE_ID=$(trilium template use "daily-journal" \
+    --title "Journal $DATE" \
+    --parent daily-notes \
+    --output json | jq -r '.noteId')
 
-NOTE_ID=$(trilium note create "Journal $DATE" \
-  --content "$CONTENT" \
-  --parent daily-notes \
-  --output json | jq -r '.noteId')
+echo "Created journal: $NOTE_ID"
 
-echo "Created journal note: $NOTE_ID"
-
-# Add label
-trilium attribute create $NOTE_ID --type label journal
+# Quick capture throughout the day
+echo "Meeting with client at 3pm" | trilium quick --tags "work,meeting"
+echo "Buy groceries" | trilium quick --tags "personal,todo"
 ```
 
-### Batch Operations
-
-```bash
-# Export all search results
-trilium search "project" --output json | \
-  jq -r '.[]noteId' | \
-  xargs -I {} trilium note export {} --format markdown --output {}.md
-
-# Delete all notes with specific label
-trilium search "#archived" --output json | \
-  jq -r '.[]noteId' | \
-  xargs -I {} trilium note delete {} --force
-```
-
-### Advanced Piping Examples
+#### System Monitoring
 
 ```bash
 #!/bin/bash
@@ -444,7 +589,15 @@ function save_system_status() {
         --parent system-logs
 }
 
-# Archive webpage with metadata
+# Schedule with cron
+# 0 */4 * * * /path/to/save_system_status.sh
+```
+
+#### Web Content Archiving
+
+```bash
+#!/bin/bash
+
 function archive_webpage() {
     URL="$1"
     TITLE=$(curl -s "$URL" | grep -o '<title>[^<]*' | sed 's/<title>//')
@@ -454,132 +607,103 @@ function archive_webpage() {
         --format html \
         --strip-html \
         --tags "web-archive" \
-        --attributes "url=$URL" \
-        --attributes "archived=$(date +%Y-%m-%d)"
+        -a "url=$URL" \
+        -a "archived=$(date +%Y-%m-%d)"
 }
 
-# Create notes from CSV data
-function csv_to_notes() {
-    cat data.csv | while IFS=, read -r title content tags; do
-        echo "$content" | trilium pipe \
-            --title "$title" \
-            --tags "$tags" \
-            --quiet
-    done
-}
-
-# Git commit to note
-function git_log_note() {
-    git log --oneline -10 | trilium pipe \
-        --title "Git Log $(date +%Y-%m-%d)" \
-        --format code \
-        --language git \
-        --parent project-notes
-}
-
-# RSS feed to notes (requires xmlstarlet)
-function rss_to_notes() {
-    curl -s "$1" | xmlstarlet sel -t -m "//item" \
-        -v "title" -o "|" \
-        -v "description" -o "|" \
-        -v "link" -n | \
-    while IFS='|' read -r title desc link; do
-        echo -e "$desc\n\nSource: $link" | trilium pipe \
-            --title "$title" \
-            --tags "rss,news" \
-            --parent news-feed \
-            --quiet
-    done
-}
-
-# Docker logs to note
-function docker_logs_note() {
-    CONTAINER="$1"
-    docker logs "$CONTAINER" 2>&1 | tail -500 | trilium pipe \
-        --title "Docker Logs: $CONTAINER - $(date +%Y-%m-%d)" \
-        --format code \
-        --language log \
-        --tags "docker,logs" \
-        --parent docker-logs
-}
-
-# Screenshot to note (macOS)
-function screenshot_note() {
-    TMPFILE="/tmp/screenshot_$(date +%s).png"
-    screencapture -i "$TMPFILE"
-    if [ -f "$TMPFILE" ]; then
-        # First create note with description
-        NOTE_ID=$(echo "Screenshot taken at $(date)" | trilium pipe \
-            --title "Screenshot $(date +%Y-%m-%d_%H-%M)" \
-            --tags "screenshot" \
-            --quiet)
-        
-        # Then attach the image
-        trilium attachment upload "$NOTE_ID" "$TMPFILE"
-        rm "$TMPFILE"
-    fi
-}
-
-# Database query results to note
-function query_to_note() {
-    DB="$1"
-    QUERY="$2"
-    
-    mysql -u user -p "$DB" -e "$QUERY" | trilium pipe \
-        --title "Query Results: $(date +%Y-%m-%d)" \
-        --format code \
-        --language sql \
-        --attributes "database=$DB" \
-        --attributes "query=$QUERY"
-}
+# Usage: archive_webpage "https://example.com/article"
 ```
 
-### Automation with Cron
+### Batch Operations
 
 ```bash
-# Add to crontab for daily system reports
-0 9 * * * df -h | trilium pipe --title "Disk Usage $(date +%Y-%m-%d)" --parent daily-reports --quiet
+# Export all project notes
+trilium search "#project" --output json | \
+    jq -r '.[].noteId' | \
+    xargs -I {} trilium note export {} --format markdown --output {}.md
 
-# Backup important config files
-0 2 * * * cat /etc/nginx/nginx.conf | trilium pipe --title "Nginx Config Backup $(date +%Y-%m-%d)" --format code --language nginx --parent backups --quiet
+# Bulk tag application
+trilium search "meeting" --output json | \
+    jq -r '.[].noteId' | \
+    xargs -I {} trilium tag add {} "work/meetings"
 
-# Monitor error logs
-*/30 * * * * tail -100 /var/log/error.log | grep ERROR | trilium pipe --title "Error Log $(date +%Y-%m-%d_%H-%M)" --parent error-logs --quiet
+# Backup important notes
+trilium tag search "#important" --output json | \
+    jq -r '.[].noteId' | \
+    while read -r note_id; do
+        trilium note export "$note_id" --format json --output "backup_${note_id}.json"
+    done
 ```
 
-## Security
-
-- ETAPI tokens are stored in the configuration file
-- Use environment variables for sensitive data in scripts
-- The config file permissions should be set to 600 (user read/write only)
-
-## Troubleshooting
-
-### Connection Issues
+### Git Workflow Integration
 
 ```bash
-# Test connection
-trilium info
+#!/bin/bash
 
-# Enable verbose logging
-trilium --verbose search "test"
+# Export notes for documentation
+trilium sync-git ~/project-docs \
+    --note-id documentation-root \
+    --operation export \
+    --branch main
 
-# Check configuration
+# Commit and push
+cd ~/project-docs
+git add .
+git commit -m "Update documentation from Trilium"
+git push origin main
+
+# Import external documentation
+trilium sync-git ~/external-docs \
+    --operation import \
+    --parent imported-docs \
+    --branch main
+```
+
+## 🔐 Security & Best Practices
+
+### Security Considerations
+
+- **API Token Storage**: Tokens are stored in config file with 600 permissions
+- **Environment Variables**: Use environment variables for sensitive data in scripts
+- **Rate Limiting**: Built-in API rate limiting to prevent server overload
+- **Input Validation**: All inputs are validated before processing
+- **Secure Defaults**: Conservative security settings by default
+
+### Best Practices
+
+```bash
+# Use profiles for different environments
+trilium profile create prod --server https://trilium.company.com
+trilium profile create dev --server http://localhost:9999
+
+# Always use dry-run for destructive operations
+trilium import-dir ~/sensitive-data --dry-run
+trilium link update old-id new-id --dry-run
+
+# Regular backups
+trilium backup --name "weekly-$(date +%Y-%m-%d)"
+
+# Monitor configuration
 trilium config show
 ```
 
-### Common Issues
+### Configuration Security
 
-1. **Authentication Failed**: Ensure your ETAPI token is correct
-2. **Connection Refused**: Check if Trilium server is running and accessible
-3. **Timeout Errors**: Increase timeout in configuration
+```bash
+# Set proper permissions
+chmod 600 ~/.config/trilium-cli/config.yaml
 
-## Development
+# Use environment variables for tokens
+export TRILIUM_API_TOKEN=$(pass show trilium/api-token)
+trilium search "project"  # Uses env token
+```
+
+## 🛠️ Development & Contributing
 
 ### Building from Source
 
 ```bash
-# Debug build
+# Development build
 cargo build
 
 # Release build
@@ -590,16 +714,207 @@ cargo test
 
 # Run with debug logging
 RUST_LOG=debug cargo run -- search "test"
+
+# Integration tests
+cargo test --test integration_test
+
+# Security tests
+cargo test --test security_tests
 ```
 
-## License
+### Architecture Overview
 
-MIT License
+```
+src/
+├── cli/                  # CLI argument parsing and commands
+│   ├── args.rs          # Command definitions
+│   └── commands/        # Individual command implementations
+├── tui/                 # Terminal user interface
+│   ├── app.rs          # Application state management
+│   ├── ui.rs           # UI rendering
+│   └── event.rs        # Event handling
+├── api/                 # Trilium API client
+│   └── client.rs       # HTTP client and API methods
+├── import_export/       # Import/export functionality
+│   ├── obsidian.rs     # Obsidian integration
+│   ├── notion.rs       # Notion integration
+│   ├── directory.rs    # Directory bulk import
+│   └── git.rs          # Git integration
+├── utils/              # Utility modules
+│   ├── links.rs        # Link processing
+│   ├── tags.rs         # Tag management
+│   ├── templates.rs    # Template system
+│   └── search.rs       # Enhanced search
+└── lib.rs              # Library root
+```
 
-## Contributing
+### Contributing Guidelines
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. **Fork the repository** and create a feature branch
+2. **Write tests** for new functionality
+3. **Follow Rust conventions** and run `cargo fmt`
+4. **Add documentation** for new features
+5. **Submit a pull request** with clear description
 
-## Acknowledgments
+### Running Tests
 
-Built for [Trilium Notes](https://github.com/zadam/trilium) - an excellent hierarchical note-taking application.
+```bash
+# Unit tests
+cargo test --lib
+
+# Integration tests
+cargo test --test "*"
+
+# Specific test modules
+cargo test test_import_export
+cargo test test_tui_navigation
+cargo test test_pipe_functionality
+
+# Test with features
+cargo test --features git
+```
+
+## 📊 Performance & Scalability
+
+### Performance Features
+
+- **Async Operations**: Non-blocking I/O for all network operations
+- **Batch Processing**: Configurable batch sizes for large operations
+- **Memory Efficiency**: Streaming for large files and datasets
+- **Caching**: Intelligent caching of frequently accessed data
+- **Progress Tracking**: Real-time progress without performance impact
+
+### Scalability
+
+The CLI is designed to handle large Trilium installations:
+
+- **Large Note Trees**: Efficient tree navigation with lazy loading
+- **Bulk Operations**: Handle thousands of files in import operations
+- **Memory Management**: Configurable limits and efficient resource usage
+- **API Rate Limiting**: Respect server limits and prevent overload
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+#### Connection Problems
+
+```bash
+# Test connectivity
+trilium info
+trilium --verbose info
+
+# Check configuration
+trilium config show
+
+# Test with curl
+curl -H "Authorization: $TRILIUM_API_TOKEN" \
+     $TRILIUM_SERVER_URL/etapi/app-info
+```
+
+#### Authentication Issues
+
+```bash
+# Verify token
+trilium config show | grep api_token
+
+# Re-initialize configuration
+trilium config init
+
+# Use environment variable
+export TRILIUM_API_TOKEN=your_token
+trilium info
+```
+
+#### Import/Export Issues
+
+```bash
+# Check file permissions
+ls -la /path/to/import/directory
+
+# Test with dry-run
+trilium import-dir /path/to/files --dry-run
+
+# Enable verbose logging
+trilium --verbose import-obsidian ~/vault --dry-run
+```
+
+#### TUI Issues
+
+```bash
+# Terminal compatibility
+echo $TERM
+tput colors
+
+# Clear terminal state
+reset
+stty sane
+
+# Alternative terminal
+TERM=xterm-256color trilium tui
+```
+
+### Error Messages
+
+| Error | Solution |
+|-------|----------|
+| `Connection refused` | Check if Trilium server is running |
+| `Authentication failed` | Verify ETAPI token |
+| `Timeout` | Increase timeout in config or use `--timeout` |
+| `Permission denied` | Check file permissions |
+| `Invalid JSON` | Check API response format |
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+RUST_LOG=debug trilium search "test"
+
+# Full trace logging
+RUST_LOG=trace trilium --verbose import-dir ~/notes
+
+# Log to file
+RUST_LOG=debug trilium search "test" 2> debug.log
+```
+
+## 📈 Roadmap
+
+### Planned Features
+
+- [ ] **Real-time Sync**: Live synchronization with external systems
+- [ ] **Plugin Ecosystem**: Extensible plugin architecture
+- [ ] **Web Interface**: Browser-based management interface
+- [ ] **Mobile Companion**: Mobile app integration
+- [ ] **Advanced Analytics**: Note usage and relationship analytics
+- [ ] **Collaboration Features**: Multi-user workflow support
+
+### Integration Targets
+
+- [ ] **Roam Research**: Import/export support
+- [ ] **LogSeq**: Bidirectional sync
+- [ ] **Dendron**: VSCode workspace integration
+- [ ] **Zettlr**: Academic writing workflow
+- [ ] **Standard Notes**: Encrypted sync support
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **[Trilium Notes](https://github.com/zadam/trilium)** - The excellent knowledge management system
+- **[Ratatui](https://ratatui.rs/)** - Terminal user interface framework
+- **[Clap](https://clap.rs/)** - Command line argument parsing
+- **Rust Community** - For the amazing ecosystem and tools
+
+## 🔗 Links
+
+- **Documentation**: [Full CLI Reference](docs/cli-reference.md)
+- **API Documentation**: [Rust Docs](https://docs.rs/trilium-cli)
+- **Issue Tracker**: [GitHub Issues](https://github.com/yourusername/trilium-cli/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/trilium-cli/discussions)
+- **Trilium ETAPI**: [API Documentation](https://github.com/zadam/trilium/wiki/ETAPI)
+
+---
+
+**Happy note-taking!** 📝✨
