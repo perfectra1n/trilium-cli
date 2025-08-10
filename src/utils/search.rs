@@ -1,3 +1,10 @@
+//! Search utilities and result formatting
+//! 
+//! This module provides utilities for enhanced search functionality,
+//! including result highlighting and formatting.
+
+#![allow(dead_code)]
+
 use crate::models::{EnhancedSearchResult, HighlightedSnippet, TextHighlight};
 use crate::error::{Result, TriliumError};
 use regex::Regex;

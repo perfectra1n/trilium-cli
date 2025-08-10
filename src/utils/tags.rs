@@ -1,3 +1,10 @@
+//! Tag management and hierarchy utilities
+//! 
+//! This module provides utilities for working with tags, including
+//! hierarchy management and tag completion.
+
+#![allow(dead_code)]
+
 use crate::models::TagInfo;
 use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;

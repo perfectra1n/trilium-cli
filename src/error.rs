@@ -584,9 +584,9 @@ mod tests {
     
     #[test]
     fn test_retryable_errors() {
-        assert!(TriliumError::HttpError(reqwest::Error::from(reqwest::ErrorKind::Request)).is_retryable());
         assert!(TriliumError::TimeoutError("test".to_string()).is_retryable());
         assert!(TriliumError::NetworkError("test".to_string()).is_retryable());
+        assert!(TriliumError::ApiError("test".to_string()).is_retryable());
         
         assert!(!TriliumError::ValidationError("test".to_string()).is_retryable());
         assert!(!TriliumError::SecurityError("test".to_string()).is_retryable());

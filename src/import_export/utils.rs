@@ -1,10 +1,15 @@
+//! Utility functions for import/export operations
+//! 
+//! This module provides common utilities for file handling, validation,
+//! and processing during import/export operations.
+
+#![allow(dead_code)]
+
 use crate::error::{TriliumError, Result};
 use crate::utils::resource_limits::ResourceLimits;
 use anyhow::Context;
 use indicatif::{ProgressBar, ProgressStyle};
 use regex::Regex;
-use sha2::{Sha256, Digest};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf, Component};
 

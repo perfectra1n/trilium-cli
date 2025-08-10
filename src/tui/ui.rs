@@ -30,6 +30,18 @@ pub fn draw(f: &mut Frame, app: &App) {
     if matches!(app.input_mode, InputMode::FuzzySearch) {
         draw_fuzzy_search_popup(f, app);
     }
+    
+    // Draw help popup
+    if matches!(app.input_mode, InputMode::Help) {
+        draw_help_popup(f);
+    }
+    
+    // Draw log viewer popup
+    if matches!(app.input_mode, InputMode::LogViewer) {
+        draw_log_viewer_popup(f, app);
+    }
+    
+    // Note: External editor is now used instead of inline editing
 }
 
 fn draw_title(f: &mut Frame, app: &App, area: Rect) {
@@ -41,6 +53,7 @@ fn draw_title(f: &mut Frame, app: &App, area: Rect) {
         ViewMode::Recent => "Recent Notes",
         ViewMode::Bookmarks => "Bookmarked Notes",
         ViewMode::Split => "Split View",
+        ViewMode::LogViewer => "Log Viewer",
     };
     
     let search_indicator = if app.input_mode == InputMode::FuzzySearch {
@@ -83,6 +96,9 @@ fn draw_main_content(f: &mut Frame, app: &App, area: Rect) {
         }
         ViewMode::Bookmarks => {
             draw_bookmarks(f, app, area);
+        }
+        ViewMode::LogViewer => {
+            draw_log_viewer(f, app, area);
         }
         _ => {
             // Original layout for other modes
@@ -313,7 +329,28 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
     let status = if let Some(msg) = &app.status_message {
         msg.clone()
     } else {
-        format!("Mode: {:?} | View: {:?} | Press ? for help", app.input_mode, app.view_mode)
+        let mode_str = match app.input_mode {
+            InputMode::Normal => "NORMAL",
+            InputMode::Editing => "EDITING",
+            InputMode::Search => "SEARCH",
+            InputMode::FuzzySearch => "FUZZY SEARCH",
+            InputMode::Command => "COMMAND",
+            InputMode::Help => "HELP",
+            InputMode::LogViewer => "LOG VIEWER",
+        };
+        
+        let view_str = match app.view_mode {
+            ViewMode::Tree => "Tree",
+            ViewMode::Content => "Content",
+            ViewMode::Attributes => "Attributes",
+            ViewMode::Search => "Search",
+            ViewMode::Recent => "Recent",
+            ViewMode::Bookmarks => "Bookmarks",
+            ViewMode::Split => "Split",
+            ViewMode::LogViewer => "LogViewer",
+        };
+        
+        format!(" Mode: {} | View: {} | Press ? for help, q to quit ", mode_str, view_str)
     };
 
     let paragraph = Paragraph::new(status)
@@ -322,6 +359,7 @@ fn draw_status_bar(f: &mut Frame, app: &App, area: Rect) {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(Color::DarkGray))
         )
+        .style(Style::default().fg(Color::White))
         .alignment(Alignment::Left);
 
     f.render_widget(paragraph, area);
@@ -676,3 +714,181 @@ fn get_visible_tree_items(app: &App) -> Vec<&crate::models::NoteTreeItem> {
     collect_visible(&mut items, &app.tree_items);
     items
 }
+
+fn draw_help_popup(f: &mut Frame) {
+    let area = centered_rect(90, 90, f.size());
+    
+    // Clear the area with a dark background
+    f.render_widget(Clear, area);
+    
+    let help_text = vec![
+        Line::from(Span::styled("Trilium CLI - Keyboard Shortcuts", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Navigation ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow))),
+        Line::from("  j/k or ↑/↓        Navigate up/down"),
+        Line::from("  h/l or ←/→        Navigate left/right (collapse/expand in tree)"),
+        Line::from("  g                 Go to top"),
+        Line::from("  G                 Go to bottom"),
+        Line::from("  Tab               Switch between view modes (forward)"),
+        Line::from("  Shift+Tab         Switch between view modes (reverse)"),
+        Line::from("  ESC               Go back to tree view/cancel operation"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Note Operations ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Green))),
+        Line::from("  o or Enter        Open/load note content"),
+        Line::from("  e or i            Edit note in external editor"),
+        Line::from("  c                 Collapse current tree node"),
+        Line::from("  Ctrl+c            Create new note (prompts for title)"),
+        Line::from("  Ctrl+d            Delete current note (with confirmation)"),
+        Line::from("  r                 Refresh tree from server"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Search ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta))),
+        Line::from("  /                 Fuzzy search notes by title (real-time)"),
+        Line::from("  *                 Full text search in note content"),
+        Line::from("  n                 Next search result"),
+        Line::from("  N                 Previous search result"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ View Modes ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Blue))),
+        Line::from("  R                 Switch to recent notes view"),
+        Line::from("  B                 Switch to bookmarked notes view"),
+        Line::from("  b                 Toggle bookmark for current note"),
+        Line::from("  s                 Toggle split view mode"),
+        Line::from("  <                 Decrease left pane size in split view"),
+        Line::from("  >                 Increase left pane size in split view"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Content Scrolling ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Cyan))),
+        Line::from("  PageUp            Scroll content up (when viewing note)"),
+        Line::from("  PageDown          Scroll content down (when viewing note)"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ External Editor ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Red))),
+        Line::from("  e or i            Launch external editor for current note"),
+        Line::from("                    Uses $EDITOR, $VISUAL, or profile editor setting"),
+        Line::from("                    Secure validation prevents command injection"),
+        Line::from("                    Temporary files have restricted permissions"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Command Mode ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Magenta))),
+        Line::from("  :                 Enter command mode"),
+        Line::from("    new <title>     Create note with title"),
+        Line::from("    delete          Delete current note"),
+        Line::from("    search <query>  Search note content"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ Debug & Logs ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Red))),
+        Line::from("  Ctrl+Alt+D        Toggle debug mode (enables API logging)"),
+        Line::from("  L                 Open log viewer (view recent logs and errors)"),
+        Line::from("                    Shows timestamps, levels, operations, and messages"),
+        Line::from("                    In log viewer: j/k to navigate, Ctrl+C to clear, ESC to exit"),
+        Line::from(""),
+        Line::from(Span::styled("━━━ General ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow))),
+        Line::from(Span::styled("  ?                 Show/Hide this help", Style::default().fg(Color::LightCyan))),
+        Line::from("  q                 Quit application"),
+        Line::from(""),
+        Line::from(Span::styled("Status messages auto-clear after 5 seconds", Style::default().add_modifier(Modifier::ITALIC).fg(Color::Gray))),
+        Line::from(Span::styled("Press ESC, q, or ? to close this help window", Style::default().add_modifier(Modifier::ITALIC).fg(Color::Gray))),
+    ];
+    
+    let help = Paragraph::new(help_text)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(Span::styled(
+                    " ❓ Help - Press ESC, q, or ? to close ",
+                    Style::default().add_modifier(Modifier::BOLD)
+                ))
+                .border_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD))
+                .style(Style::default().bg(Color::Black))
+        )
+        .alignment(Alignment::Left)
+        .scroll((0, 0))
+        .wrap(Wrap { trim: false });
+    
+    f.render_widget(help, area);
+}
+
+fn draw_log_viewer(f: &mut Frame, app: &App, area: Rect) {
+    let mut items: Vec<ListItem> = Vec::new();
+    
+    if app.log_entries.is_empty() {
+        items.push(ListItem::new(Span::styled(
+            "No log entries yet",
+            Style::default().fg(Color::Gray),
+        )));
+        items.push(ListItem::new(""));
+        items.push(ListItem::new(Span::styled(
+            "Log entries will appear here when debug logging is enabled",
+            Style::default().fg(Color::Gray),
+        )));
+        items.push(ListItem::new(Span::styled(
+            "Press Ctrl+Alt+D to toggle debug mode",
+            Style::default().fg(Color::DarkGray),
+        )));
+        items.push(ListItem::new(""));
+        items.push(ListItem::new(Span::styled(
+            "Navigation: j/k or ↑/↓ to scroll, g/G for top/bottom, Ctrl+C to clear",
+            Style::default().fg(Color::DarkGray),
+        )));
+        items.push(ListItem::new(Span::styled(
+            "Press ESC or q to exit log viewer",
+            Style::default().fg(Color::Yellow),
+        )));
+    } else {
+        // Show logs starting from the scroll offset
+        let entries: Vec<&crate::tui::app::LogEntry> = app.log_entries.iter().collect();
+        let visible_entries = entries.iter().skip(app.log_scroll_offset);
+        
+        for (index, entry) in visible_entries.enumerate() {
+            let actual_index = index + app.log_scroll_offset;
+            let style = if actual_index == app.log_selected_index {
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            let level_color = match entry.level {
+                crate::tui::app::LogLevel::Debug => Color::Blue,
+                crate::tui::app::LogLevel::Info => Color::Green,
+                crate::tui::app::LogLevel::Warn => Color::Yellow,
+                crate::tui::app::LogLevel::Error => Color::Red,
+            };
+            
+            let timestamp = entry.timestamp.format("%H:%M:%S").to_string();
+            
+            let line = Line::from(vec![
+                Span::styled(format!("[{}] ", timestamp), Style::default().fg(Color::DarkGray)),
+                Span::styled(format!("{} ", entry.level), Style::default().fg(level_color).add_modifier(Modifier::BOLD)),
+                Span::styled(format!("{}: ", entry.operation), Style::default().fg(Color::Cyan)),
+                Span::raw(entry.message.clone()),
+            ]);
+            
+            items.push(ListItem::new(line).style(style));
+        }
+    }
+    
+    // Get log file path for display
+    let log_file_path = if let Ok(home_dir) = std::env::var("HOME") {
+        format!("{}/.trilium-debug.log", home_dir)
+    } else {
+        "~/.trilium-debug.log".to_string()
+    };
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Logs ({}) - File: {} ", app.log_entries.len(), log_file_path))
+                .border_style(Style::default().fg(Color::Yellow))
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    f.render_widget(list, area);
+}
+
+fn draw_log_viewer_popup(f: &mut Frame, app: &App) {
+    let area = centered_rect(95, 90, f.size());
+    
+    // Clear the area with a dark background
+    f.render_widget(Clear, area);
+    
+    draw_log_viewer(f, app, area);
+}
+
+// Note editor UI removed - using external editor instead

@@ -1,6 +1,13 @@
+//! Format conversion utilities for import/export operations
+//! 
+//! This module provides various format conversion functions that are used
+//! for importing and exporting notes between different formats.
+
+#![allow(dead_code)]
+
 use crate::error::Result;
-use anyhow::{Context, bail};
-use pulldown_cmark::{Parser, html, Options, Event, Tag};
+use anyhow::Context;
+use pulldown_cmark::{Parser, html, Options};
 use regex::Regex;
 use std::collections::HashMap;
 
@@ -69,7 +76,7 @@ pub fn csv_to_markdown(csv_content: &str) -> Result<String> {
 fn parse_csv_line(line: &str) -> Vec<&str> {
     // Simple CSV parser - doesn't handle all edge cases but good enough for basic use
     let mut fields = Vec::new();
-    let mut current_field = "";
+    let _current_field = "";
     let mut in_quotes = false;
     let mut start = 0;
     

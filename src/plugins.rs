@@ -1,10 +1,9 @@
 use crate::config::Config;
 use crate::error::{Result, TriliumError};
-use crate::models::Note;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::fs;
 use tokio::process::Command as TokioCommand;
 

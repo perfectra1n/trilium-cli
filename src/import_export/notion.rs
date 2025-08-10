@@ -4,14 +4,14 @@ use crate::models::{Note, CreateNoteRequest, CreateAttributeRequest};
 use crate::import_export::{ImportResult, ExportResult, ImportExportConfig};
 use crate::import_export::utils::{
     sanitize_filename, extract_title_from_content, create_progress_bar, 
-    should_ignore_file, normalize_title
+    normalize_title
 };
 use crate::utils::resource_limits::ResourceLimits;
-use anyhow::{Context, bail};
+use anyhow::Context;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, BufRead, BufReader};
+use std::io::{Read, BufReader};
 use std::path::{Path, PathBuf, Component};
 use zip::ZipArchive;
 
@@ -174,9 +174,9 @@ fn extract_notion_zip(zip_path: &Path) -> Result<PathBuf> {
         .with_context(|| format!("Failed to open ZIP file: {}", zip_path.display()))?;
     
     let mut archive = ZipArchive::new(file)?;
-    let temp_dir = tempfile::tempdir()
-        .context("Failed to create temporary directory")?
-        .into_path();
+    let temp_dir_handle = tempfile::tempdir()
+        .context("Failed to create temporary directory")?;
+    let temp_dir = temp_dir_handle.path().to_path_buf();
     
     if archive.len() > max_files as usize {
         return Err(TriliumError::ValidationError(format!("ZIP file contains too many files: {} (max: {})", archive.len(), max_files)));
@@ -573,9 +573,9 @@ async fn process_notion_file(
     notion_file: &NotionFile,
     client: &TriliumClient,
     parent_note_id: &str,
-    page_id_map: &mut HashMap<String, String>,
+    _page_id_map: &mut HashMap<String, String>,
     title_id_map: &mut HashMap<String, String>,
-    config: &ImportExportConfig,
+    _config: &ImportExportConfig,
     dry_run: bool,
 ) -> Result<String> {
     let title = notion_file.title.clone();
@@ -583,7 +583,7 @@ async fn process_notion_file(
 
     if dry_run {
         println!("Would import Notion page: {}", title);
-        let note_id = format!("dry-run-notion-{}", chrono::Utc::now().timestamp_nanos());
+        let note_id = format!("dry-run-notion-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
         title_id_map.insert(normalize_title(&title), note_id.clone());
         return Ok(note_id);
     }
@@ -732,7 +732,7 @@ async fn collect_notes_recursive(client: &TriliumClient, root_note_id: &str) -> 
 /// Export a single note to Notion format
 async fn export_note_to_notion(
     note: &Note,
-    client: &TriliumClient,
+    _client: &TriliumClient,
     output_path: &Path,
     dry_run: bool,
 ) -> Result<()> {

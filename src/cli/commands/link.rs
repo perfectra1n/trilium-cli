@@ -86,9 +86,9 @@ async fn handle_outgoing(
 ) -> Result<()> {
     print_info(&format!("Finding outgoing links from note: {}", note_id));
     
-    let outgoing_links = client.get_outgoing_links(note_id).await?;
+    let _outgoing_links = client.get_outgoing_links(note_id).await?;
     let note_content = client.get_note_content(note_id).await?;
-    let note = client.get_note(note_id).await?;
+    let _note = client.get_note(note_id).await?;
     
     // Parse links from content
     let parsed_links = parse_links(&note_content)?;

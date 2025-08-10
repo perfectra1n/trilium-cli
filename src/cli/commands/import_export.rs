@@ -1,14 +1,8 @@
 use crate::api::client::TriliumClient;
 use crate::cli::output::OutputFormat;
-use crate::error::{TriliumError, Result};
-use crate::models::{Note, CreateNoteRequest, Attribute, CreateAttributeRequest};
-use anyhow::Context;
+use crate::error::Result;
 use colored::Colorize;
-use indicatif::{ProgressBar, ProgressStyle};
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
+use std::path::Path;
 
 pub async fn import_obsidian(
     client: &TriliumClient,

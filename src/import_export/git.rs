@@ -1,10 +1,10 @@
 use crate::api::client::TriliumClient;
 use crate::error::{TriliumError, Result};
 use crate::models::{Note, CreateNoteRequest, CreateAttributeRequest};
-use crate::import_export::{GitSyncResult, ImportExportConfig};
+use crate::import_export::GitSyncResult;
 use crate::import_export::utils::{
-    detect_file_type, sanitize_filename, extract_title_from_content,
-    create_progress_bar, should_ignore_file, normalize_title
+    sanitize_filename, extract_title_from_content,
+    create_progress_bar
 };
 use crate::cli::commands::import_export::GitOperation;
 use crate::utils::resource_limits::ResourceLimits;
@@ -414,7 +414,7 @@ async fn process_git_file(
     
     if dry_run {
         println!("Would import git file: {} -> {}", file_path.display(), title);
-        return Ok(format!("dry-run-git-{}", chrono::Utc::now().timestamp_nanos()));
+        return Ok(format!("dry-run-git-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)));
     }
     
     // Create the note
@@ -461,7 +461,7 @@ async fn ensure_directory_note(
         .unwrap_or("Unknown Directory");
 
     if dry_run {
-        let note_id = format!("dry-run-git-dir-{}", chrono::Utc::now().timestamp_nanos());
+        let note_id = format!("dry-run-git-dir-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
         dir_note_map.insert(dir_path.to_path_buf(), note_id.clone());
         return Ok(note_id);
     }
@@ -765,7 +765,7 @@ fn sanitize_git_hash(hash: &str) -> Result<String> {
 
 /// Sanitize git commit message
 fn sanitize_commit_message(message: &str) -> Result<String> {
-    let limits = ResourceLimits::default();
+    let _limits = ResourceLimits::default();
     
     if message.len() > 10000 {
         return Ok(format!("{}... (truncated)", &message[..9000]));

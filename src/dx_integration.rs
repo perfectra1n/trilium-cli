@@ -5,7 +5,7 @@
 
 use crate::completion::CompletionProvider;
 use crate::config::Config;
-use crate::error::{EnhancedError, ErrorContext, TriliumError};
+use crate::error::{ErrorContext, TriliumError};
 use crate::help::{HelpSystem, CommandSuggestions};
 use crate::plugins::PluginManager;
 use crate::progress_integration::ProgressIntegration;
@@ -26,7 +26,7 @@ impl DXCoordinator {
     pub async fn new(config: Config, quiet: bool) -> crate::error::Result<Self> {
         let help_system = HelpSystem::new();
         let command_suggestions = CommandSuggestions::new();
-        let mut completion_provider = CompletionProvider::new(config.clone());
+        let completion_provider = CompletionProvider::new(config.clone());
         let mut plugin_manager = PluginManager::new(config.clone());
         let progress = ProgressIntegration::new(&config, quiet);
         
@@ -60,7 +60,7 @@ impl DXCoordinator {
         let command = &args[0];
         
         // Check if it's a plugin command
-        if let Some(plugin_commands) = self.plugin_manager.get_plugin_commands().get(command) {
+        if let Some(_plugin_commands) = self.plugin_manager.get_plugin_commands().get(command) {
             return self.execute_plugin_command(command, &args[1..]).await;
         }
         

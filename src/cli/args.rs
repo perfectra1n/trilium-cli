@@ -345,11 +345,6 @@ pub enum Commands {
         command: CompletionCommands,
     },
 
-    /// Show help information
-    Help {
-        /// Command or topic to get help for
-        topic: Option<String>,
-    },
 }
 
 #[derive(Subcommand)]

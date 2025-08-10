@@ -200,16 +200,13 @@ async fn main() -> Result<()> {
                 &cli::output::OutputFormat::from_string(&cli.output)?
             ).await?;
         }
-        Some(Commands::Plugin { command }) => {
+        Some(Commands::Plugin { command: _ }) => {
             // Plugin commands would be implemented here
             eprintln!("Plugin system not yet implemented");
         }
-        Some(Commands::Completion { command }) => {
+        Some(Commands::Completion { command: _ }) => {
             // Completion commands would be implemented here
             eprintln!("Completion system not yet implemented");
-        }
-        Some(Commands::Help { topic }) => {
-            commands::help::handle(topic).await?;
         }
     }
 

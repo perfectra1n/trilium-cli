@@ -1,15 +1,14 @@
 use crate::api::client::TriliumClient;
 use crate::error::{TriliumError, Result};
-use crate::models::{Note, CreateNoteRequest, CreateAttributeRequest};
+use crate::models::{CreateNoteRequest, CreateAttributeRequest};
 use crate::import_export::{ImportResult, ImportExportConfig};
 use crate::import_export::utils::{
-    detect_file_type, sanitize_filename, extract_title_from_content, 
+    detect_file_type, extract_title_from_content, 
     create_progress_bar, should_ignore_file, calculate_file_checksum,
     normalize_title, validate_directory
 };
 use crate::utils::resource_limits::ResourceLimits;
-use anyhow::Context;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -167,7 +166,7 @@ fn find_files_to_import(
         None => 10, // Default to 10 levels
     };
     
-    let mut walker = WalkDir::new(dir_path)
+    let walker = WalkDir::new(dir_path)
         .follow_links(false)
         .max_depth(safe_depth)
         .into_iter();
@@ -388,7 +387,7 @@ async fn process_file_with_limits(
 
     if dry_run {
         println!("Would import: {} -> {}", file_info.path.display(), title);
-        let note_id = format!("dry-run-file-{}", chrono::Utc::now().timestamp_nanos());
+        let note_id = format!("dry-run-file-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
         title_map.insert(normalize_title(&title), note_id.clone());
         return Ok(note_id);
     }

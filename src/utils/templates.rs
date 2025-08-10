@@ -1,3 +1,10 @@
+//! Template processing utilities
+//! 
+//! This module provides utilities for working with note templates,
+//! including variable substitution and template validation.
+
+#![allow(dead_code)]
+
 use crate::models::{Template, TemplateVariable};
 use crate::error::{Result, TriliumError};
 use chrono::Local;

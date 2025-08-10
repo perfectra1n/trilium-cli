@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Completion cache entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -398,7 +398,7 @@ impl CompletionProvider {
 
     /// Install completion script for a shell
     pub fn install_completion_script(shell: Shell) -> Result<()> {
-        let shell_name = match shell {
+        let _shell_name = match shell {
             Shell::Bash => "bash",
             Shell::Zsh => "zsh",
             Shell::Fish => "fish",

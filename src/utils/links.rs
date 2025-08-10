@@ -1,3 +1,10 @@
+//! Link management utilities
+//! 
+//! This module provides utilities for finding, validating, and manipulating
+//! links within notes and between notes.
+
+#![allow(dead_code)]
+
 use crate::models::{ParsedLink, LinkType, LinkReference};
 use crate::error::{Result, TriliumError};
 use regex::Regex;

@@ -1,3 +1,10 @@
+//! Rate limiting utilities for API operations
+//! 
+//! This module provides rate limiting functionality to prevent overwhelming
+//! the Trilium server with too many concurrent requests.
+
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

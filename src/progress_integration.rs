@@ -1,7 +1,7 @@
 use crate::config::Config;
 use crate::error::Result;
 use crate::progress::{ProgressManager, ProgressIndicator, ProgressType};
-use crate::models::{Note, SearchResult};
+use crate::models::SearchResult;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -112,8 +112,7 @@ macro_rules! with_progress {
 pub mod utils {
     use super::*;
     use crate::api::TriliumClient;
-    use crate::models::Note;
-    use tokio::time::{Duration, interval};
+    use tokio::time::Duration;
     
     /// Run API operation with progress reporting
     pub async fn with_api_progress<F, Fut, T>(

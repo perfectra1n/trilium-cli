@@ -126,7 +126,7 @@ async fn show_profile(config: &Config, name: Option<&str>, output_format: &Outpu
         
     match output_format {
         OutputFormat::Json => {
-            let mut profile_data = serde_json::json!({
+            let profile_data = serde_json::json!({
                 "name": profile_name,
                 "current": profile_name == config.current_profile,
                 "config": profile
@@ -205,7 +205,7 @@ async fn create_profile(
         return Err(TriliumError::profile_error(&format!("Profile '{}' already exists", name)));
     }
     
-    let mut new_profile = if let Some(source_name) = from {
+    let new_profile = if let Some(source_name) = from {
         // Copy from existing profile
         let source_profile = config.profiles.get(&source_name)
             .ok_or_else(|| TriliumError::profile_error(&format!("Source profile '{}' not found", source_name)))?;

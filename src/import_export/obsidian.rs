@@ -1,20 +1,17 @@
 use crate::api::client::TriliumClient;
 use crate::error::{TriliumError, Result};
-use crate::models::{Note, CreateNoteRequest, Attribute, CreateAttributeRequest};
+use crate::models::{Note, CreateNoteRequest, CreateAttributeRequest};
 use crate::import_export::{ImportResult, ExportResult, ImportExportConfig};
-use crate::import_export::utils::{detect_file_type, sanitize_filename, create_progress_bar};
+use crate::import_export::utils::{sanitize_filename, create_progress_bar};
 use crate::utils::resource_limits::ResourceLimits;
 use anyhow::Context;
 use gray_matter::Matter;
-use indicatif::ProgressBar;
-use pulldown_cmark::{Parser, html};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 use walkdir::WalkDir;
 
 /// Import an Obsidian vault into Trilium
@@ -160,7 +157,7 @@ async fn process_obsidian_file(
     vault_root: &Path,
     client: &TriliumClient,
     dir_note_map: &mut HashMap<PathBuf, String>,
-    config: &ImportExportConfig,
+    _config: &ImportExportConfig,
     dry_run: bool,
 ) -> Result<String> {
     let limits = ResourceLimits::default();
@@ -191,7 +188,7 @@ async fn process_obsidian_file(
     
     // Extract title from frontmatter or filename
     let title = parsed.data.as_ref()
-        .and_then(|data| {
+        .and_then(|_data| {
             // Try to convert Pod to string and then parse as YAML
             None // For now, skip frontmatter title extraction due to Pod serialization issues
         })
@@ -403,8 +400,8 @@ async fn process_obsidian_attachments(
 /// Process a single attachment directory
 async fn process_attachment_directory(
     dir_path: &Path,
-    client: &TriliumClient,
-    parent_note_id: &str,
+    _client: &TriliumClient,
+    _parent_note_id: &str,
     dry_run: bool,
 ) -> Result<usize> {
     let mut count = 0;
@@ -451,7 +448,7 @@ async fn collect_notes_recursive(client: &TriliumClient, root_note_id: &str) -> 
 /// Export a single note to Obsidian format
 async fn export_note_to_obsidian(
     note: &Note,
-    client: &TriliumClient,
+    _client: &TriliumClient,
     vault_path: &Path,
     dry_run: bool,
 ) -> Result<()> {
@@ -535,8 +532,8 @@ fn convert_trilium_to_obsidian_syntax(content: &str) -> String {
 
 /// Export attachments to Obsidian format
 async fn export_attachments_to_obsidian(
-    client: &TriliumClient,
-    root_note_id: &str,
+    _client: &TriliumClient,
+    _root_note_id: &str,
     vault_path: &Path,
     dry_run: bool,
 ) -> Result<usize> {

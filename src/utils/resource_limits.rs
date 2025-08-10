@@ -1,3 +1,10 @@
+//! Resource limits and security constraints
+//! 
+//! This module defines resource limits to prevent abuse and ensure
+//! safe operation of import/export functionality.
+
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

@@ -91,6 +91,7 @@ mime_guess = "2.0"
 
 # HTML parsing
 html2md = "0.2"
+html2text = "0.4"
 scraper = "0.18"
 
 # Regular expressions

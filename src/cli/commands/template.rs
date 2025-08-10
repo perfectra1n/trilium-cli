@@ -325,7 +325,7 @@ async fn handle_use(
     
     // Process template
     let processed_content = process_template(&template_obj.content, &var_map, None)?;
-    let processed_title = process_template(&template_obj.title, &var_map, None)?;
+    let _processed_title = process_template(&template_obj.title, &var_map, None)?;
     
     let final_content = if edit {
         edit::edit(&processed_content)?
@@ -364,12 +364,12 @@ async fn handle_update(
     title: Option<String>,
     description: Option<String>,
     edit: bool,
-    config: &Config,
+    _config: &Config,
     output_format: &str
 ) -> Result<()> {
     print_info(&format!("Updating template: {}", template_id));
     
-    let note = client.get_note(template_id).await?;
+    let _note = client.get_note(template_id).await?;
     
     let mut updates = Vec::new();
     

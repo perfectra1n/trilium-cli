@@ -52,9 +52,134 @@ pub struct UpdateNoteRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub is_protected: Option<bool>,
+}
+
+impl UpdateNoteRequest {
+    /// Validate that the request doesn't contain read-only or invalid properties
+    pub fn validate(&self) -> Result<(), crate::error::TriliumError> {
+        use crate::error::TriliumError;
+        
+        // Check for empty title
+        if let Some(ref title) = self.title {
+            if title.trim().is_empty() {
+                return Err(TriliumError::ValidationError(
+                    "Note title cannot be empty".to_string()
+                ));
+            }
+            
+            // Check title length (reasonable limit)
+            if title.len() > 1000 {
+                return Err(TriliumError::ValidationError(
+                    "Note title is too long (max 1000 characters)".to_string()
+                ));
+            }
+        }
+        
+        // Check for valid note type
+        if let Some(ref note_type) = self.note_type {
+            let valid_types = ["text", "code", "file", "image", "search", "book", "relationMap", "canvas"];
+            if !valid_types.contains(&note_type.as_str()) {
+                return Err(TriliumError::ValidationError(
+                    format!("Invalid note type '{}'. Valid types are: {}", 
+                            note_type, 
+                            valid_types.join(", "))
+                ));
+            }
+        }
+        
+        // Check for valid MIME type format
+        if let Some(ref mime) = self.mime {
+            if !mime.contains('/') || mime.split('/').count() != 2 {
+                return Err(TriliumError::ValidationError(
+                    format!("Invalid MIME type format '{}'. Expected format: 'type/subtype'", mime)
+                ));
+            }
+        }
+        
+        
+        Ok(())
+    }
+    
+    /// Create a safe UpdateNoteRequest builder to prevent invalid property setting
+    pub fn builder() -> UpdateNoteRequestBuilder {
+        UpdateNoteRequestBuilder::new()
+    }
+    
+    /// Check if the request is empty (no fields set)
+    pub fn is_empty(&self) -> bool {
+        self.title.is_none() 
+            && self.note_type.is_none() 
+            && self.mime.is_none() 
+            && self.is_protected.is_none()
+    }
+    
+    /// Get a debug representation of the JSON that will be serialized
+    pub fn debug_json(&self) -> String {
+        match serde_json::to_string_pretty(self) {
+            Ok(json) => json,
+            Err(e) => format!("Failed to serialize to JSON: {}", e),
+        }
+    }
+    
+    /// Count how many fields are set in this request
+    pub fn field_count(&self) -> usize {
+        let mut count = 0;
+        if self.title.is_some() { count += 1; }
+        if self.note_type.is_some() { count += 1; }
+        if self.mime.is_some() { count += 1; }
+        if self.is_protected.is_some() { count += 1; }
+        count
+    }
+}
+
+/// Builder for UpdateNoteRequest that provides validation and prevents setting invalid properties
+#[derive(Debug, Default)]
+pub struct UpdateNoteRequestBuilder {
+    title: Option<String>,
+    note_type: Option<String>,
+    mime: Option<String>,
+    is_protected: Option<bool>,
+}
+
+impl UpdateNoteRequestBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+    
+    pub fn note_type<S: Into<String>>(mut self, note_type: S) -> Self {
+        self.note_type = Some(note_type.into());
+        self
+    }
+    
+    pub fn mime<S: Into<String>>(mut self, mime: S) -> Self {
+        self.mime = Some(mime.into());
+        self
+    }
+    
+    
+    pub fn is_protected(mut self, is_protected: bool) -> Self {
+        self.is_protected = Some(is_protected);
+        self
+    }
+    
+    pub fn build(self) -> Result<UpdateNoteRequest, crate::error::TriliumError> {
+        let request = UpdateNoteRequest {
+            title: self.title,
+            note_type: self.note_type,
+            mime: self.mime,
+            is_protected: self.is_protected,
+        };
+        
+        // Validate the request before returning
+        request.validate()?;
+        Ok(request)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -321,4 +446,161 @@ pub struct QuickCaptureRequest {
     pub title: Option<String>,
     pub inbox_note_id: Option<String>,
     pub metadata: std::collections::HashMap<String, String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_update_note_request_validation() {
+        // Test valid request
+        let valid_request = UpdateNoteRequest {
+            title: Some("Valid Title".to_string()),
+            note_type: Some("text".to_string()),
+            mime: Some("text/html".to_string()),
+            is_protected: Some(false),
+        };
+        assert!(valid_request.validate().is_ok());
+        
+        // Test empty title
+        let empty_title_request = UpdateNoteRequest {
+            title: Some("".to_string()),
+            note_type: None,
+            mime: None,
+            is_protected: None,
+        };
+        assert!(empty_title_request.validate().is_err());
+        
+        // Test invalid note type
+        let invalid_type_request = UpdateNoteRequest {
+            title: None,
+            note_type: Some("invalid_type".to_string()),
+            mime: None,
+            is_protected: None,
+        };
+        assert!(invalid_type_request.validate().is_err());
+        
+        // Test invalid MIME type
+        let invalid_mime_request = UpdateNoteRequest {
+            title: None,
+            note_type: None,
+            mime: Some("invalid_mime".to_string()),
+            is_protected: None,
+        };
+        assert!(invalid_mime_request.validate().is_err());
+    }
+    
+    #[test]
+    fn test_update_note_request_builder() {
+        let request = UpdateNoteRequest::builder()
+            .title("Test Note")
+            .note_type("text")
+            .is_protected(false)
+            .build();
+        
+        assert!(request.is_ok());
+        let request = request.unwrap();
+        assert_eq!(request.title, Some("Test Note".to_string()));
+        assert_eq!(request.note_type, Some("text".to_string()));
+        assert_eq!(request.is_protected, Some(false));
+        
+        // Test builder with invalid data
+        let invalid_request = UpdateNoteRequest::builder()
+            .title("")
+            .build();
+        assert!(invalid_request.is_err());
+    }
+    
+    #[test]
+    fn test_update_note_request_empty_check() {
+        let empty_request = UpdateNoteRequest {
+            title: None,
+            note_type: None,
+            mime: None,
+            is_protected: None,
+        };
+        assert!(empty_request.is_empty());
+        assert_eq!(empty_request.field_count(), 0);
+        
+        let non_empty_request = UpdateNoteRequest {
+            title: Some("Test".to_string()),
+            note_type: None,
+            mime: None,
+            is_protected: None,
+        };
+        assert!(!non_empty_request.is_empty());
+        assert_eq!(non_empty_request.field_count(), 1);
+    }
+    
+    #[test]
+    fn test_update_note_request_json_serialization() {
+        let request = UpdateNoteRequest {
+            title: Some("Test Title".to_string()),
+            note_type: Some("text".to_string()),
+            mime: Some("text/html".to_string()),
+            is_protected: Some(false),
+        };
+        
+        let json = serde_json::to_string(&request).unwrap();
+        println!("Serialized JSON: {}", json);
+        
+        // Verify the JSON contains the correct field names
+        assert!(json.contains("\"title\":\"Test Title\""));
+        assert!(json.contains("\"type\":\"text\"")); // Should be "type", not "noteType"
+        assert!(json.contains("\"mime\":\"text/html\""));
+        assert!(json.contains("\"isProtected\":false")); // Should be "isProtected", not "is_protected"
+    }
+    
+    #[test]
+    fn test_update_note_request_minimal_fields() {
+        // Test that we can create a request with only title (common case for note editing)
+        let title_only_request = UpdateNoteRequest {
+            title: Some("Updated title".to_string()),
+            note_type: None,
+            mime: None,
+            is_protected: None,
+        };
+        
+        let json = serde_json::to_string(&title_only_request).unwrap();
+        println!("Title-only JSON: {}", json);
+        
+        // Should only contain the title field
+        assert!(json.contains("\"title\":\"Updated title\""));
+        assert!(!json.contains("type"));
+        assert!(!json.contains("mime"));
+        assert!(!json.contains("isProtected"));
+        
+        assert_eq!(title_only_request.field_count(), 1);
+        assert!(!title_only_request.is_empty());
+    }
+}
+
+// Structured API error response from Trilium
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TriliumApiErrorResponse {
+    pub status: u16,
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
+}
+
+// Debug information for API requests/responses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiRequestDebug {
+    pub method: String,
+    pub url: String,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: Option<String>,
+    pub timestamp: chrono::DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiResponseDebug {
+    pub status_code: u16,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: String,
+    pub duration_ms: u64,
+    pub timestamp: chrono::DateTime<Utc>,
 }
