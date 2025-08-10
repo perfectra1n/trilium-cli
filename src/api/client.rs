@@ -33,7 +33,7 @@ impl TriliumClient {
                     .unwrap_or(false)
             });
 
-        let mut client_instance = Self {
+        let client_instance = Self {
             client,
             base_url: profile.server_url.clone(),
             api_token: profile.api_token.clone(),

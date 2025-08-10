@@ -83,20 +83,23 @@ pub async fn handle(command: NoteCommands, config: &Config, output_format: &str)
                 return Ok(());
             }
 
-            let request = UpdateNoteRequest {
-                title,
-                note_type: None,
-                mime: None,
-                content: final_content.clone(),
-                is_protected: None,
-            };
-
-            let note = client.update_note(&note_id, request).await?;
+            // Update metadata if title is provided
+            if let Some(title) = title {
+                let request = UpdateNoteRequest {
+                    title: Some(title),
+                    note_type: None,
+                    mime: None,
+                    is_protected: None,
+                };
+                client.update_note(&note_id, request).await?;
+            }
             
-            // Update content separately if provided
+            // Update content separately using the correct endpoint if content is provided
             if let Some(content) = final_content {
                 client.update_note_content(&note_id, &content).await?;
             }
+            
+            let note = client.get_note(&note_id).await?;
 
             print_success(&format!("Updated note: {} ({})", note.title, note.note_id));
             Ok(())

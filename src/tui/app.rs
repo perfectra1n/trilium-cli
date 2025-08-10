@@ -28,6 +28,175 @@ fn sanitize_filename(name: &str) -> String {
         .to_string()
 }
 
+/// Content format detected from note content and metadata
+#[derive(Debug, Clone, PartialEq)]
+enum ContentFormat {
+    Html,
+    Markdown,
+    PlainText,
+}
+
+/// Content conversion result containing the converted content and detected format
+#[derive(Debug, Clone)]
+pub struct ContentConversionResult {
+    content: String,
+    original_format: ContentFormat,
+    editing_format: ContentFormat,
+}
+
+/// Content format handler for bidirectional conversion between formats
+struct ContentFormatHandler;
+
+impl ContentFormatHandler {
+    /// Detect content format from note metadata and content
+    fn detect_format(note: &Note, content: &str) -> ContentFormat {
+        // First check MIME type from note metadata
+        if let Some(mime) = &note.mime {
+            if mime.contains("html") {
+                return ContentFormat::Html;
+            }
+            if mime.contains("markdown") || mime.contains("md") {
+                return ContentFormat::Markdown;
+            }
+        }
+        
+        // Check note type
+        if note.note_type == "text" {
+            // Analyze content for HTML tags
+            if Self::looks_like_html(content) {
+                return ContentFormat::Html;
+            }
+            // Check for markdown patterns
+            if Self::looks_like_markdown(content) {
+                return ContentFormat::Markdown;
+            }
+        }
+        
+        ContentFormat::PlainText
+    }
+    
+    /// Check if content looks like HTML
+    fn looks_like_html(content: &str) -> bool {
+        let html_indicators = [
+            "<html>", "<body>", "<div>", "<p>", "<span>", "<h1>", "<h2>", "<h3>",
+            "<strong>", "<em>", "<a href=", "<img", "<ul>", "<ol>", "<li>",
+            "<table>", "<tr>", "<td>", "<th>", "<br>", "<br/>", "&nbsp;", "&amp;",
+            "&lt;", "&gt;", "&quot;"
+        ];
+        
+        let content_lower = content.to_lowercase();
+        html_indicators.iter().any(|indicator| content_lower.contains(indicator))
+    }
+    
+    /// Check if content looks like markdown
+    fn looks_like_markdown(content: &str) -> bool {
+        let markdown_indicators = [
+            "# ", "## ", "### ", "#### ", "##### ", "###### ",
+            "**", "__", "*", "_", 
+            "```", "`",
+            "- ", "* ", 
+            "1. ", "2. ", "3. ",
+            "[]", "[x]",
+            "](" // link syntax
+        ];
+        
+        markdown_indicators.iter().any(|indicator| content.contains(indicator))
+    }
+    
+    /// Convert content to editing format (HTML -> Markdown for better editing experience)
+    fn prepare_for_editing(note: &Note, content: &str) -> ContentConversionResult {
+        let original_format = Self::detect_format(note, content);
+        
+        match original_format {
+            ContentFormat::Html => {
+                // Convert HTML to Markdown for editing
+                let markdown_content = Self::html_to_markdown(content);
+                ContentConversionResult {
+                    content: markdown_content,
+                    original_format: ContentFormat::Html,
+                    editing_format: ContentFormat::Markdown,
+                }
+            }
+            ContentFormat::Markdown => {
+                // Already Markdown, use as-is
+                ContentConversionResult {
+                    content: content.to_string(),
+                    original_format: ContentFormat::Markdown,
+                    editing_format: ContentFormat::Markdown,
+                }
+            }
+            ContentFormat::PlainText => {
+                // Plain text, use as-is
+                ContentConversionResult {
+                    content: content.to_string(),
+                    original_format: ContentFormat::PlainText,
+                    editing_format: ContentFormat::PlainText,
+                }
+            }
+        }
+    }
+    
+    /// Convert edited content back to Trilium format (Markdown -> HTML if original was HTML)
+    fn prepare_for_saving(conversion_result: &ContentConversionResult, edited_content: &str) -> String {
+        match (&conversion_result.original_format, &conversion_result.editing_format) {
+            // If original was HTML and we edited in Markdown, convert back to HTML
+            (ContentFormat::Html, ContentFormat::Markdown) => {
+                Self::markdown_to_html(edited_content)
+            }
+            // If original was Markdown, save as HTML (Trilium stores as HTML)
+            (ContentFormat::Markdown, ContentFormat::Markdown) => {
+                Self::markdown_to_html(edited_content)
+            }
+            // Plain text - wrap in basic HTML paragraph if needed
+            (ContentFormat::PlainText, ContentFormat::PlainText) => {
+                if edited_content.trim().is_empty() {
+                    edited_content.to_string()
+                } else {
+                    // For plain text, we can either save as-is or wrap in basic HTML
+                    // Trilium can handle plain text, so save as-is
+                    edited_content.to_string()
+                }
+            }
+            // Fallback - save as-is
+            _ => edited_content.to_string(),
+        }
+    }
+    
+    /// Get appropriate file extension for editing
+    fn get_file_extension(conversion_result: &ContentConversionResult) -> &'static str {
+        match conversion_result.editing_format {
+            ContentFormat::Html => "html",
+            ContentFormat::Markdown => "md",
+            ContentFormat::PlainText => "txt",
+        }
+    }
+    
+    /// Convert HTML to Markdown using html2md
+    fn html_to_markdown(html: &str) -> String {
+        // Use html2md for conversion
+        html2md::parse_html(html)
+    }
+    
+    /// Convert Markdown to HTML using pulldown-cmark
+    fn markdown_to_html(markdown: &str) -> String {
+        use pulldown_cmark::{Parser, Options, html};
+        
+        // Set up parser options for better compatibility
+        let mut options = Options::empty();
+        options.insert(Options::ENABLE_STRIKETHROUGH);
+        options.insert(Options::ENABLE_TABLES);
+        options.insert(Options::ENABLE_FOOTNOTES);
+        options.insert(Options::ENABLE_TASKLISTS);
+        options.insert(Options::ENABLE_SMART_PUNCTUATION);
+        
+        let parser = Parser::new_ext(markdown, options);
+        let mut html_output = String::new();
+        html::push_html(&mut html_output, parser);
+        
+        html_output
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
     Normal,
@@ -119,6 +288,7 @@ pub struct App {
     pub selected_index: usize,
     pub current_note: Option<Note>,
     pub current_content: Option<String>,
+    pub current_content_conversion: Option<ContentConversionResult>,
     pub input_mode: InputMode,
     pub view_mode: ViewMode,
     pub input: String,
@@ -204,6 +374,7 @@ impl App {
             selected_index: 0,
             current_note: None,
             current_content: None,
+            current_content_conversion: None,
             input_mode: InputMode::Normal,
             view_mode: ViewMode::Tree,
             input: String::new(),
@@ -372,13 +543,34 @@ impl App {
                 self.load_current_note().await?;
             }
             
-            // Extract note data to avoid borrowing issues
-            let (note_id, title, content) = if let Some(note) = &self.current_note {
-                (note.note_id.clone(), note.title.clone(), self.current_content.clone().unwrap_or_default())
+            // Extract note data and prepare content for editing
+            let (note_id, title, content_for_editing, conversion_result) = if let Some(note) = &self.current_note {
+                let raw_content = self.current_content.clone().unwrap_or_default();
+                
+                // Use content format handler to prepare content for editing
+                let conversion = ContentFormatHandler::prepare_for_editing(note, &raw_content);
+                let editing_content = conversion.content.clone();
+                
+                // Extract data we need before borrowing self mutably
+                let note_id = note.note_id.clone();
+                let note_title = note.title.clone();
+                
+                // Show user what format they're editing (not currently used but prepared for future enhancements)
+                
+                (note_id, note_title, editing_content, Some(conversion))
             } else {
                 self.set_status_message("Unable to load note for editing".to_string());
                 return Ok(());
             };
+            
+            // Now we can borrow self mutably to set the status message
+            self.set_status_message(format!("Editing {} in {} format", title, 
+                match conversion_result.as_ref().map(|c| &c.editing_format) {
+                    Some(ContentFormat::Markdown) => "Markdown",
+                    Some(ContentFormat::Html) => "HTML", 
+                    Some(ContentFormat::PlainText) => "plain text",
+                    _ => "text",
+                }));
             
             {
                 // content already extracted above
@@ -402,7 +594,7 @@ impl App {
                 let _guard = TerminalGuard { events };
                 
                 // Launch external editor and get the edited content
-                let result = self.launch_external_editor_secure(&content, &title);
+                let result = self.launch_external_editor_secure(&content_for_editing, &title, conversion_result.as_ref());
                 
                 // Drop guard and manually restore terminal (guard handles errors)
                 drop(_guard);
@@ -441,50 +633,59 @@ impl App {
                 match result {
                     Ok(edited_content) => {
                         // Check if content was modified
-                        if edited_content != content {
-                            // Update the note with the edited content using the validated builder
-                            let request = match UpdateNoteRequest::builder()
-                                .content(edited_content.clone())
-                                .build() {
-                                    Ok(req) => req,
-                                    Err(e) => {
-                                        let error_msg = format!("Validation error: {}", e);
-                                        self.set_status_message(error_msg.clone());
-                                        self.write_debug_log("UpdateNoteRequest validation failed", &error_msg);
-                                        return Ok(());
-                                    }
+                        if edited_content != content_for_editing {
+                            // Convert edited content back to Trilium format using the conversion result
+                            let content_for_saving = if let Some(ref conversion) = conversion_result {
+                                let converted = ContentFormatHandler::prepare_for_saving(conversion, &edited_content);
+                                
+                                // Show user what conversion is happening
+                                let save_msg = match (&conversion.original_format, &conversion.editing_format) {
+                                    (ContentFormat::Html, ContentFormat::Markdown) => "Converting Markdown back to HTML for Trilium",
+                                    (ContentFormat::Markdown, ContentFormat::Markdown) => "Converting Markdown to HTML for Trilium",
+                                    (ContentFormat::PlainText, ContentFormat::PlainText) => "Saving as plain text",
+                                    _ => "Preparing content for save",
                                 };
+                                self.set_status_message(save_msg.to_string());
+                                
+                                converted
+                            } else {
+                                // Fallback if no conversion result
+                                edited_content.clone()
+                            };
                             
-                            // Log the request being sent in debug mode
+                            // Update the note content using the correct API endpoint for content
                             if self.debug_mode {
                                 let request_debug = format!(
-                                    "Sending UpdateNoteRequest for note {}: field_count={}, content_length={}", 
+                                    "Sending content update for note {}: original_length={}, edited_length={}, final_length={}", 
                                     note_id, 
-                                    request.field_count(), 
-                                    request.content.as_ref().map(|c| c.len()).unwrap_or(0)
+                                    content_for_editing.len(),
+                                    edited_content.len(),
+                                    content_for_saving.len()
                                 );
-                                self.write_debug_log("Note Update Request", &request_debug);
-                                self.write_debug_log("Request JSON", &request.debug_json());
+                                self.write_debug_log("Note Content Update Request", &request_debug);
                             }
                             
-                            match self.client.update_note(&note_id, request).await {
-                                Ok(_) => {
-                                    self.current_content = Some(edited_content);
-                                    self.set_status_message("Note content saved".to_string());
+                            match self.client.update_note_content(&note_id, &content_for_saving).await {
+                                Ok(()) => {
+                                    // Store the raw content that was saved to Trilium
+                                    self.current_content = Some(content_for_saving);
+                                    // Update the conversion result for future edits
+                                    self.current_content_conversion = conversion_result;
+                                    self.set_status_message("Note content saved successfully".to_string());
                                 }
                                 Err(e) => {
                                     // Create comprehensive error information
                                     let error_details = format!(
-                                        "Note save failed - Note ID: {}, Error: {:#?}, Error Type: {}", 
+                                        "Note content save failed - Note ID: {}, Error: {:#?}, Error Type: {}", 
                                         note_id, e, e.category()
                                     );
                                     
                                     let error_msg = if self.debug_mode {
                                         // In debug mode, show full error with detailed information
-                                        format!("Failed to save note: {:#?}", e)
+                                        format!("Failed to save note content: {:#?}", e)
                                     } else {
                                         // For user-facing errors, show the complete message without truncation
-                                        let base_msg = format!("Failed to save note: {}", e);
+                                        let base_msg = format!("Failed to save note content: {}", e);
                                         // Ensure we capture the full error message without arbitrary truncation
                                         if base_msg.len() > 300 {
                                             // Only truncate if extremely long, with clear indication
@@ -497,7 +698,7 @@ impl App {
                                     self.set_status_message(error_msg);
                                     
                                     // Always log comprehensive error details
-                                    self.write_debug_log("Note Save Error", &error_details);
+                                    self.write_debug_log("Note Content Save Error", &error_details);
                                     
                                     // Additional structured logging for different error types
                                     match e {
@@ -506,10 +707,6 @@ impl App {
                                         }
                                         crate::error::TriliumError::ApiError(msg) => {
                                             self.write_debug_log("API Error Details", &msg);
-                                            if msg.contains("PROPERTY_NOT_ALLOWED") {
-                                                self.write_debug_log("PROPERTY_NOT_ALLOWED Troubleshooting", 
-                                                    "This error typically means invalid fields in UpdateNoteRequest. Check debug logs for request JSON.");
-                                            }
                                         }
                                         _ => {}
                                     }
@@ -531,6 +728,15 @@ impl App {
     }
 
     async fn handle_input(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        // Add debug logging for all key presses when debug mode is enabled
+        if self.debug_mode {
+            let key_desc = format!(
+                "Key: {:?}, Modifiers: {:?}, Mode: {:?}",
+                key.code, key.modifiers, self.input_mode
+            );
+            self.add_log_entry(LogLevel::Debug, "Key Press".to_string(), key_desc);
+        }
+        
         match self.input_mode {
             InputMode::Normal => self.handle_normal_mode(key).await?,
             InputMode::Editing => self.handle_editing_mode(key).await?,
@@ -607,7 +813,11 @@ impl App {
             KeyCode::Up | KeyCode::Char('k') if key.modifiers.is_empty() => self.handle_navigation_up(),
             KeyCode::Down | KeyCode::Char('j') if key.modifiers.is_empty() => self.handle_navigation_down(),
             KeyCode::Left | KeyCode::Char('h') if key.modifiers.is_empty() => self.handle_navigation_left().await?,
-            KeyCode::Right | KeyCode::Char('l') if key.modifiers.is_empty() => self.handle_navigation_right().await?,
+            KeyCode::Right | KeyCode::Char('l') if key.modifiers.is_empty() => {
+                self.add_log_entry(LogLevel::Debug, "Key Handler".to_string(), 
+                                   "Lowercase l or right arrow pressed - navigating right".to_string());
+                self.handle_navigation_right().await?;
+            }
             
             // Vim-like jump commands
             KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::NONE) => {
@@ -683,8 +893,10 @@ impl App {
             // Debug mode toggle (Ctrl+Alt+D)
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) && key.modifiers.contains(KeyModifiers::ALT) => self.toggle_debug_mode(),
             
-            // Log viewer (L)
-            KeyCode::Char('L') if key.modifiers.is_empty() => {
+            // Alternative log viewer key (Ctrl+L)
+            KeyCode::Char('l') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.add_log_entry(LogLevel::Debug, "Key Handler".to_string(), 
+                                   "Ctrl+L pressed - opening log viewer (alternative)".to_string());
                 self.input_mode = InputMode::LogViewer;
                 self.view_mode = ViewMode::LogViewer;
                 self.log_selected_index = 0;
@@ -878,16 +1090,23 @@ impl App {
         };
         
         let note = self.client.get_note(&note_id).await?;
-        let mut content = self.client.get_note_content(&note_id).await.ok();
+        let raw_content = self.client.get_note_content(&note_id).await.ok();
         
-        // Convert HTML content to plain text if needed
-        if let Some(ref note_mime) = note.mime {
-            if note_mime.contains("html") {
-                if let Some(ref html_content) = content {
-                    content = Some(Self::html_to_text(html_content));
-                }
-            }
-        }
+        // Use content format handler for display content
+        let (display_content, conversion_result) = if let Some(ref content) = raw_content {
+            // Prepare content for editing to get proper conversion info
+            let conversion = ContentFormatHandler::prepare_for_editing(&note, content);
+            
+            // For display, convert HTML to readable text if it's HTML content
+            let display_text = match ContentFormatHandler::detect_format(&note, content) {
+                ContentFormat::Html => Self::html_to_text(content),
+                _ => content.clone(),
+            };
+            
+            (Some(display_text), Some(conversion))
+        } else {
+            (raw_content, None)
+        };
         
         // Add to recent notes
         if let Err(e) = self.config.add_recent_note(note_id.clone(), title.clone()) {
@@ -897,7 +1116,8 @@ impl App {
         }
         
         self.current_note = Some(note);
-        self.current_content = content;
+        self.current_content = display_content;
+        self.current_content_conversion = conversion_result;
         self.view_mode = ViewMode::Content;
         self.content_scroll = 0;
         self.set_status_message(format!("Loaded: {}", title));
@@ -1355,6 +1575,7 @@ impl App {
             self.set_status_message(format!("Deleted: {}", note.title));
             self.current_note = None;
             self.current_content = None;
+            self.current_content_conversion = None;
             self.refresh_tree().await?;
         }
         Ok(())
@@ -1368,7 +1589,7 @@ impl App {
         let input = self.input.clone();
         
         if let Some(note_id) = self.current_note.as_ref().map(|n| n.note_id.clone()) {
-            // Update existing note with validated request
+            // Update existing note metadata (title) with validated request
             let request = match UpdateNoteRequest::builder()
                 .title(input.clone())
                 .build() {
@@ -1379,23 +1600,33 @@ impl App {
                     }
                 };
             
+            if self.debug_mode {
+                let request_debug = format!(
+                    "Sending metadata update for note {}: field_count={}", 
+                    note_id, 
+                    request.field_count()
+                );
+                self.write_debug_log("Note Metadata Update Request", &request_debug);
+                self.write_debug_log("Request JSON", &request.debug_json());
+            }
+            
             match self.client.update_note(&note_id, request).await {
                 Ok(updated) => {
                     let title = updated.title.clone();
                     self.current_note = Some(updated);
-                    self.set_status_message(format!("Updated: {}", title));
+                    self.set_status_message(format!("Updated title: {}", title));
                     self.refresh_tree().await?;
                 }
                 Err(e) => {
                     let error_details = format!(
-                        "Note update failed - Note ID: {}, Error: {:#?}, Error Type: {}", 
+                        "Note metadata update failed - Note ID: {}, Error: {:#?}, Error Type: {}", 
                         note_id, e, e.category()
                     );
                     
                     let error_msg = if self.debug_mode {
-                        format!("Failed to update note: {:#?}", e)
+                        format!("Failed to update note metadata: {:#?}", e)
                     } else {
-                        let base_msg = format!("Failed to update note: {}", e);
+                        let base_msg = format!("Failed to update note metadata: {}", e);
                         if base_msg.len() > 300 {
                             format!("{}... (Use Ctrl+Alt+D for full details)", 
                                     base_msg.chars().take(250).collect::<String>())
@@ -1406,7 +1637,7 @@ impl App {
                     self.set_status_message(error_msg);
                     
                     // Always log comprehensive error details
-                    self.write_debug_log("Note Update Error", &error_details);
+                    self.write_debug_log("Note Metadata Update Error", &error_details);
                     
                     // Additional structured logging for different error types
                     match e {
@@ -1415,10 +1646,6 @@ impl App {
                         }
                         crate::error::TriliumError::ApiError(msg) => {
                             self.write_debug_log("API Error Details", &msg);
-                            if msg.contains("PROPERTY_NOT_ALLOWED") {
-                                self.write_debug_log("PROPERTY_NOT_ALLOWED Troubleshooting", 
-                                    "This error typically means invalid fields in UpdateNoteRequest. Check debug logs for request JSON.");
-                            }
                         }
                         _ => {}
                     }
@@ -1597,15 +1824,18 @@ impl App {
     // Fallback editor launcher (using edit crate if available)
     fn launch_external_editor(&self, content: &str, note_title: &str) -> Result<String> {
         // Always use the secure launcher
-        self.launch_external_editor_secure(content, note_title)
+        self.launch_external_editor_secure(content, note_title, None)
     }
     
     // Secure editor launcher with validation and proper file permissions
-    fn launch_external_editor_secure(&self, content: &str, note_title: &str) -> Result<String> {
+    fn launch_external_editor_secure(&self, content: &str, note_title: &str, conversion_result: Option<&ContentConversionResult>) -> Result<String> {
         use std::io::Write;
         
         // Create a temporary file with appropriate extension and secure permissions
-        let extension = if let Some(note) = &self.current_note {
+        let extension = if let Some(conversion) = conversion_result {
+            ContentFormatHandler::get_file_extension(conversion)
+        } else if let Some(note) = &self.current_note {
+            // Fallback to old logic
             match note.mime.as_deref() {
                 Some(mime) if mime.contains("html") => "html",
                 Some(mime) if mime.contains("markdown") => "md",

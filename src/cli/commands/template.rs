@@ -379,7 +379,6 @@ async fn handle_update(
             title: Some(format!("Template: {}", new_title)),
             note_type: None,
             mime: None,
-            content: None,
             is_protected: None,
         };
         client.update_note(template_id, update_request).await?;

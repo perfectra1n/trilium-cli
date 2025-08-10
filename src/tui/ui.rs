@@ -773,7 +773,7 @@ fn draw_help_popup(f: &mut Frame) {
         Line::from(""),
         Line::from(Span::styled("━━━ Debug & Logs ━━━", Style::default().add_modifier(Modifier::BOLD).fg(Color::Red))),
         Line::from("  Ctrl+Alt+D        Toggle debug mode (enables API logging)"),
-        Line::from("  L                 Open log viewer (view recent logs and errors)"),
+        Line::from("  Ctrl+L            Open log viewer (view recent logs and errors)"),
         Line::from("                    Shows timestamps, levels, operations, and messages"),
         Line::from("                    In log viewer: j/k to navigate, Ctrl+C to clear, ESC to exit"),
         Line::from(""),
