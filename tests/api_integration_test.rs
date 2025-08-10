@@ -15,6 +15,9 @@ async fn test_full_note_lifecycle() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -99,6 +102,9 @@ async fn test_search_with_pagination() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -132,6 +138,9 @@ async fn test_attachment_operations() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -183,6 +192,9 @@ async fn test_attribute_management() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -254,6 +266,9 @@ async fn test_error_handling() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -304,6 +319,9 @@ async fn test_calendar_operations() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -349,6 +367,9 @@ async fn test_backup_creation() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 
@@ -375,6 +396,9 @@ async fn test_branch_operations() {
         editor: None,
         timeout_seconds: 30,
         max_retries: 3,
+        recent_notes: Vec::new(),
+        bookmarked_notes: Vec::new(),
+        max_recent_notes: 15,
     };
     let client = trilium_cli::api::TriliumClient::new(&config).unwrap();
 

@@ -19,6 +19,12 @@ impl From<&str> for OutputFormat {
     }
 }
 
+impl OutputFormat {
+    pub fn from_string(s: &str) -> Result<Self, crate::error::TriliumError> {
+        Ok(Self::from(s))
+    }
+}
+
 pub fn print_notes(notes: &[Note], format: &str) {
     match OutputFormat::from(format) {
         OutputFormat::Json => print_json(notes),

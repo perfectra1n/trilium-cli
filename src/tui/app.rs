@@ -7,12 +7,14 @@ use crate::tui::ui;
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{backend::Backend, Terminal};
 use std::time::Duration;
+use fuzzy_matcher::{FuzzyMatcher, skim::SkimMatcherV2};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum InputMode {
     Normal,
     Editing,
     Search,
+    FuzzySearch,
     Command,
 }
 
@@ -22,10 +24,21 @@ pub enum ViewMode {
     Content,
     Attributes,
     Search,
+    Recent,
+    Bookmarks,
+    Split,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FuzzySearchResult {
+    pub item: NoteTreeItem,
+    pub score: i64,
+    pub indices: Vec<usize>,
 }
 
 pub struct App {
     pub client: TriliumClient,
+    pub config: Config,
     pub tree_items: Vec<NoteTreeItem>,
     pub selected_index: usize,
     pub current_note: Option<Note>,
@@ -39,6 +52,37 @@ pub struct App {
     pub should_quit: bool,
     pub scroll_offset: usize,
     pub content_scroll: usize,
+    
+    // Enhanced navigation features
+    pub fuzzy_matcher: SkimMatcherV2,
+    pub fuzzy_search_query: String,
+    pub fuzzy_search_results: Vec<FuzzySearchResult>,
+    pub fuzzy_selected_index: usize,
+    
+    // Recent notes
+    pub recent_selected_index: usize,
+    
+    // Bookmarks
+    pub bookmark_selected_index: usize,
+    
+    // Search navigation
+    pub search_match_index: usize,
+    pub total_search_matches: usize,
+    
+    // Split pane
+    pub split_pane_focused: SplitPane,
+    pub split_ratio: f32,
+    
+    // Performance optimizations
+    pub fuzzy_search_cache: Option<Vec<NoteTreeItem>>,
+    pub fuzzy_search_cache_version: u64,
+    pub tree_version: u64,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum SplitPane {
+    Left,
+    Right,
 }
 
 impl App {
@@ -55,6 +99,7 @@ impl App {
 
         Ok(Self {
             client,
+            config,
             tree_items,
             selected_index: 0,
             current_note: None,
@@ -68,6 +113,31 @@ impl App {
             should_quit: false,
             scroll_offset: 0,
             content_scroll: 0,
+            
+            // Enhanced navigation features
+            fuzzy_matcher: SkimMatcherV2::default(),
+            fuzzy_search_query: String::new(),
+            fuzzy_search_results: Vec::new(),
+            fuzzy_selected_index: 0,
+            
+            // Recent notes
+            recent_selected_index: 0,
+            
+            // Bookmarks
+            bookmark_selected_index: 0,
+            
+            // Search navigation
+            search_match_index: 0,
+            total_search_matches: 0,
+            
+            // Split pane
+            split_pane_focused: SplitPane::Left,
+            split_ratio: 0.5,
+            
+            // Performance optimizations
+            fuzzy_search_cache: None,
+            fuzzy_search_cache_version: 0,
+            tree_version: 0,
         })
     }
 
@@ -99,37 +169,137 @@ impl App {
             InputMode::Normal => self.handle_normal_mode(key).await?,
             InputMode::Editing => self.handle_editing_mode(key).await?,
             InputMode::Search => self.handle_search_mode(key).await?,
+            InputMode::FuzzySearch => self.handle_fuzzy_search_mode(key).await?,
             InputMode::Command => self.handle_command_mode(key).await?,
+        }
+        Ok(())
+    }
+
+    async fn handle_fuzzy_search_mode(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Esc => {
+                self.input_mode = InputMode::Normal;
+                self.fuzzy_search_query.clear();
+                self.fuzzy_search_results.clear();
+            }
+            KeyCode::Enter => {
+                if !self.fuzzy_search_results.is_empty() && self.fuzzy_selected_index < self.fuzzy_search_results.len() {
+                    let selected_result = &self.fuzzy_search_results[self.fuzzy_selected_index];
+                    let note_id = selected_result.item.note.note_id.clone();
+                    let title = selected_result.item.note.title.clone();
+                    
+                    // Find and select the note in the tree
+                    if let Some(index) = self.find_note_in_tree(&note_id) {
+                        self.selected_index = index;
+                        self.load_current_note().await?;
+                        // Add to recent notes
+                        if let Err(e) = self.config.add_recent_note(note_id, title) {
+                            self.status_message = Some(format!("Warning: Failed to add to recent notes: {}", e));
+                        } else if let Err(e) = self.config.save(None) {
+                            self.status_message = Some(format!("Warning: Failed to save config: {}", e));
+                        }
+                    }
+                }
+                self.input_mode = InputMode::Normal;
+                self.fuzzy_search_query.clear();
+                self.fuzzy_search_results.clear();
+            }
+            KeyCode::Up => {
+                if !self.fuzzy_search_results.is_empty() && self.fuzzy_selected_index > 0 {
+                    self.fuzzy_selected_index -= 1;
+                }
+            }
+            KeyCode::Down => {
+                if !self.fuzzy_search_results.is_empty() && self.fuzzy_selected_index < self.fuzzy_search_results.len() - 1 {
+                    self.fuzzy_selected_index += 1;
+                }
+            }
+            KeyCode::Backspace => {
+                self.fuzzy_search_query.pop();
+                self.perform_fuzzy_search();
+            }
+            KeyCode::Char(c) => {
+                self.fuzzy_search_query.push(c);
+                self.perform_fuzzy_search();
+            }
+            _ => {}
         }
         Ok(())
     }
 
     async fn handle_normal_mode(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
         match key.code {
+            // Basic navigation
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('?') | KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.show_help();
             }
-            KeyCode::Up | KeyCode::Char('k') => self.move_selection_up(),
-            KeyCode::Down | KeyCode::Char('j') => self.move_selection_down(),
-            KeyCode::Left | KeyCode::Char('h') => self.collapse_current(),
-            KeyCode::Right | KeyCode::Char('l') => self.expand_current().await?,
-            KeyCode::Enter => self.load_current_note().await?,
+            
+            // Vim-like navigation
+            KeyCode::Up | KeyCode::Char('k') => self.handle_navigation_up(),
+            KeyCode::Down | KeyCode::Char('j') => self.handle_navigation_down(),
+            KeyCode::Left | KeyCode::Char('h') => self.handle_navigation_left().await?,
+            KeyCode::Right | KeyCode::Char('l') => self.handle_navigation_right().await?,
+            
+            // Vim-like jump commands
+            KeyCode::Char('g') if key.modifiers.contains(KeyModifiers::NONE) => {
+                self.go_to_top();
+            }
+            KeyCode::Char('G') => {
+                self.go_to_bottom();
+            }
+            
+            // Open/close operations
+            KeyCode::Enter | KeyCode::Char('o') => self.handle_open_note().await?,
+            KeyCode::Char('c') if key.modifiers.is_empty() => self.collapse_current(),
+            
+            // Tab and view cycling
             KeyCode::Tab => self.cycle_view_mode(),
+            
+            // Search modes
             KeyCode::Char('/') => {
+                self.input_mode = InputMode::FuzzySearch;
+                self.fuzzy_search_query.clear();
+                self.fuzzy_search_results.clear();
+                self.fuzzy_selected_index = 0;
+            }
+            KeyCode::Char('*') => {
                 self.input_mode = InputMode::Search;
                 self.input.clear();
             }
+            KeyCode::Char('n') => self.search_next(),
+            KeyCode::Char('N') => self.search_previous(),
+            
+            // Recent and bookmarks
+            KeyCode::Char('R') => {
+                self.view_mode = ViewMode::Recent;
+                self.recent_selected_index = 0;
+            }
+            KeyCode::Char('B') => {
+                self.view_mode = ViewMode::Bookmarks;
+                self.bookmark_selected_index = 0;
+            }
+            KeyCode::Char('b') => self.toggle_bookmark().await?,
+            
+            // Split pane
+            KeyCode::Char('s') => self.toggle_split_view(),
+            KeyCode::Char('<') => self.adjust_split_left(),
+            KeyCode::Char('>') => self.adjust_split_right(),
+            
+            // Command mode and actions
             KeyCode::Char(':') => {
                 self.input_mode = InputMode::Command;
                 self.input.clear();
             }
-            KeyCode::Char('n') => self.create_note_prompt(),
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => self.create_note_prompt(),
             KeyCode::Char('e') => self.edit_note_prompt(),
-            KeyCode::Char('d') => self.delete_note_prompt().await?,
+            KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => self.delete_note_prompt().await?,
             KeyCode::Char('r') => self.refresh_tree().await?,
+            
+            // Content scrolling
             KeyCode::PageUp => self.scroll_content_up(),
             KeyCode::PageDown => self.scroll_content_down(),
+            
             _ => {}
         }
         Ok(())
@@ -302,6 +472,7 @@ impl App {
             false
         }
         update_recursive(&mut self.tree_items, parent_id, children, 0);
+        self.tree_version += 1; // Increment version to invalidate cache
         Ok(())
     }
 
@@ -318,6 +489,13 @@ impl App {
         let note = self.client.get_note(&note_id).await?;
         let content = self.client.get_note_content(&note_id).await.ok();
         
+        // Add to recent notes
+        if let Err(e) = self.config.add_recent_note(note_id.clone(), title.clone()) {
+            self.status_message = Some(format!("Warning: Failed to add to recent notes: {}", e));
+        } else if let Err(e) = self.config.save(None) {
+            self.status_message = Some(format!("Warning: Failed to save config: {}", e));
+        }
+        
         self.current_note = Some(note);
         self.current_content = content;
         self.view_mode = ViewMode::Content;
@@ -326,12 +504,256 @@ impl App {
         Ok(())
     }
 
+    // Enhanced navigation methods
+    fn handle_navigation_up(&mut self) {
+        match self.view_mode {
+            ViewMode::Recent => {
+                if self.recent_selected_index > 0 {
+                    self.recent_selected_index -= 1;
+                }
+            }
+            ViewMode::Bookmarks => {
+                if self.bookmark_selected_index > 0 {
+                    self.bookmark_selected_index -= 1;
+                }
+            }
+            _ => {
+                self.move_selection_up();
+            }
+        }
+    }
+
+    fn handle_navigation_down(&mut self) {
+        match self.view_mode {
+            ViewMode::Recent => {
+                let recent_count = self.config.current_profile()
+                    .map(|p| p.recent_notes.len())
+                    .unwrap_or(0);
+                if self.recent_selected_index < recent_count.saturating_sub(1) {
+                    self.recent_selected_index += 1;
+                }
+            }
+            ViewMode::Bookmarks => {
+                let bookmark_count = self.config.current_profile()
+                    .map(|p| p.bookmarked_notes.len())
+                    .unwrap_or(0);
+                if self.bookmark_selected_index < bookmark_count.saturating_sub(1) {
+                    self.bookmark_selected_index += 1;
+                }
+            }
+            _ => {
+                self.move_selection_down();
+            }
+        }
+    }
+
+    async fn handle_navigation_left(&mut self) -> Result<()> {
+        match self.view_mode {
+            ViewMode::Split => {
+                self.split_pane_focused = SplitPane::Left;
+            }
+            _ => {
+                self.collapse_current();
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_navigation_right(&mut self) -> Result<()> {
+        match self.view_mode {
+            ViewMode::Split => {
+                self.split_pane_focused = SplitPane::Right;
+            }
+            _ => {
+                self.expand_current().await?;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_open_note(&mut self) -> Result<()> {
+        match self.view_mode {
+            ViewMode::Recent => {
+                if let Some(profile) = self.config.profiles.get(&self.config.current_profile) {
+                    if let Some(recent_note) = profile.recent_notes.get(self.recent_selected_index) {
+                        if let Some(index) = self.find_note_in_tree(&recent_note.note_id) {
+                            self.selected_index = index;
+                            self.view_mode = ViewMode::Content;
+                            self.load_current_note().await?;
+                        }
+                    }
+                }
+            }
+            ViewMode::Bookmarks => {
+                if let Some(bookmark) = self.config.current_profile().unwrap().bookmarked_notes.get(self.bookmark_selected_index) {
+                    if let Some(index) = self.find_note_in_tree(&bookmark.note_id) {
+                        self.selected_index = index;
+                        self.view_mode = ViewMode::Content;
+                        self.load_current_note().await?;
+                    }
+                }
+            }
+            _ => {
+                self.load_current_note().await?;
+            }
+        }
+        Ok(())
+    }
+
+    fn go_to_top(&mut self) {
+        match self.view_mode {
+            ViewMode::Recent => self.recent_selected_index = 0,
+            ViewMode::Bookmarks => self.bookmark_selected_index = 0,
+            _ => {
+                self.selected_index = 0;
+                self.scroll_offset = 0;
+            }
+        }
+    }
+
+    fn go_to_bottom(&mut self) {
+        match self.view_mode {
+            ViewMode::Recent => {
+                let recent_count = self.config.current_profile()
+                    .map(|p| p.recent_notes.len())
+                    .unwrap_or(0);
+                self.recent_selected_index = recent_count.saturating_sub(1);
+            }
+            ViewMode::Bookmarks => {
+                let bookmark_count = self.config.current_profile()
+                    .map(|p| p.bookmarked_notes.len())
+                    .unwrap_or(0);
+                self.bookmark_selected_index = bookmark_count.saturating_sub(1);
+            }
+            _ => {
+                let visible_items = self.get_visible_items();
+                self.selected_index = visible_items.len().saturating_sub(1);
+                self.adjust_scroll();
+            }
+        }
+    }
+
+    async fn toggle_bookmark(&mut self) -> Result<()> {
+        if let Some(note) = &self.current_note {
+            let is_bookmarked = self.config.toggle_bookmark(note.note_id.clone(), note.title.clone())?;
+            if let Err(e) = self.config.save(None) {
+                self.status_message = Some(format!("Warning: Failed to save config: {}", e));
+                return Ok(());
+            }
+            
+            let status = if is_bookmarked {
+                format!("Bookmarked: {}", note.title)
+            } else {
+                format!("Removed bookmark: {}", note.title)
+            };
+            self.status_message = Some(status);
+        }
+        Ok(())
+    }
+
+    fn toggle_split_view(&mut self) {
+        self.view_mode = if self.view_mode == ViewMode::Split {
+            ViewMode::Tree
+        } else {
+            ViewMode::Split
+        };
+    }
+
+    fn adjust_split_left(&mut self) {
+        if self.view_mode == ViewMode::Split {
+            self.split_ratio = (self.split_ratio - 0.05).max(0.1);
+        }
+    }
+
+    fn adjust_split_right(&mut self) {
+        if self.view_mode == ViewMode::Split {
+            self.split_ratio = (self.split_ratio + 0.05).min(0.9);
+        }
+    }
+
+    fn search_next(&mut self) {
+        if self.total_search_matches > 0 {
+            self.search_match_index = (self.search_match_index + 1) % self.total_search_matches;
+            self.status_message = Some(format!("Match {}/{}", self.search_match_index + 1, self.total_search_matches));
+        }
+    }
+
+    fn search_previous(&mut self) {
+        if self.total_search_matches > 0 {
+            self.search_match_index = if self.search_match_index == 0 {
+                self.total_search_matches - 1
+            } else {
+                self.search_match_index - 1
+            };
+            self.status_message = Some(format!("Match {}/{}", self.search_match_index + 1, self.total_search_matches));
+        }
+    }
+
+    fn perform_fuzzy_search(&mut self) {
+        if self.fuzzy_search_query.is_empty() {
+            self.fuzzy_search_results.clear();
+            return;
+        }
+
+        // Build or update cache if needed
+        if self.fuzzy_search_cache.is_none() || self.fuzzy_search_cache_version != self.tree_version {
+            let mut cache = Vec::new();
+            Self::collect_all_notes_for_fuzzy_search(&self.tree_items, &mut cache);
+            self.fuzzy_search_cache = Some(cache);
+            self.fuzzy_search_cache_version = self.tree_version;
+        }
+
+        let mut results: Vec<FuzzySearchResult> = Vec::new();
+        
+        // Use cached items for better performance
+        if let Some(cache) = &self.fuzzy_search_cache {
+            for item in cache {
+                if let Some((score, indices)) = self.fuzzy_matcher.fuzzy_indices(&item.note.title, &self.fuzzy_search_query) {
+                    results.push(FuzzySearchResult {
+                        item: item.clone(),
+                        score,
+                        indices,
+                    });
+                }
+            }
+        }
+        
+        // Sort by score (higher is better)
+        results.sort_by(|a, b| b.score.cmp(&a.score));
+        
+        // Limit results to prevent UI clutter and improve performance
+        results.truncate(50);
+        
+        self.fuzzy_search_results = results;
+        self.fuzzy_selected_index = 0;
+    }
+
+    fn collect_all_notes_for_fuzzy_search(items: &[NoteTreeItem], results: &mut Vec<NoteTreeItem>) {
+        for item in items {
+            results.push(item.clone());
+            Self::collect_all_notes_for_fuzzy_search(&item.children, results);
+        }
+    }
+
+    fn find_note_in_tree(&self, note_id: &str) -> Option<usize> {
+        let visible_items = self.get_visible_items();
+        for (index, item) in visible_items.iter().enumerate() {
+            if item.note.note_id == note_id {
+                return Some(index);
+            }
+        }
+        None
+    }
+
     fn cycle_view_mode(&mut self) {
         self.view_mode = match self.view_mode {
             ViewMode::Tree => ViewMode::Content,
             ViewMode::Content => ViewMode::Attributes,
             ViewMode::Attributes => ViewMode::Search,
-            ViewMode::Search => ViewMode::Tree,
+            ViewMode::Search => ViewMode::Recent,
+            ViewMode::Recent => ViewMode::Bookmarks,
+            ViewMode::Bookmarks => ViewMode::Split,
+            ViewMode::Split => ViewMode::Tree,
         };
     }
 
@@ -411,6 +833,7 @@ impl App {
         self.tree_items = root_notes.into_iter()
             .map(|note| NoteTreeItem::new(note, 0))
             .collect();
+        self.tree_version += 1; // Increment version to invalidate cache
         self.status_message = Some("Tree refreshed".to_string());
         Ok(())
     }
@@ -481,7 +904,7 @@ impl App {
 
     fn show_help(&mut self) {
         self.status_message = Some(
-            "Keys: ↑↓/jk:navigate ←→/hl:collapse/expand Enter:load Tab:view /:search :command n:new e:edit d:delete r:refresh q:quit".to_string()
+            "Keys: jk/↑↓:nav h/←:left/collapse l/→:right/expand o/Enter:open g:top G:bottom /:fuzzy-search *:search n/N:search-next/prev R:recent B:bookmarks b:bookmark-toggle s:split-view <>:resize Ctrl+c:create e:edit Ctrl+d:delete r:refresh q:quit".to_string()
         );
     }
 

@@ -264,6 +264,9 @@ mod api_security_tests {
             editor: None,
             timeout_seconds: 30,
             max_retries: 3,
+            recent_notes: Vec::new(),
+            bookmarked_notes: Vec::new(),
+            max_recent_notes: 15,
         };
 
         // Verify the token is properly wrapped

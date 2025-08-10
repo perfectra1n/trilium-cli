@@ -9,6 +9,10 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub config: Option<PathBuf>,
 
+    /// Configuration profile to use
+    #[arg(short, long, global = true)]
+    pub profile: Option<String>,
+
     /// Trilium server URL (overrides config)
     #[arg(long, global = true, env = "TRILIUM_SERVER_URL")]
     pub server_url: Option<String>,
@@ -40,6 +44,12 @@ pub enum Commands {
         command: ConfigCommands,
     },
 
+    /// Profile management
+    Profile {
+        #[command(subcommand)]
+        command: ProfileCommands,
+    },
+
     /// Note operations
     Note {
         #[command(subcommand)]
@@ -62,6 +72,22 @@ pub enum Commands {
         /// Include archived notes
         #[arg(short, long)]
         archived: bool,
+
+        /// Enable regex mode
+        #[arg(short, long)]
+        regex: bool,
+
+        /// Show context lines around matches
+        #[arg(short = 'C', long, default_value = "2")]
+        context: usize,
+
+        /// Include note content in search
+        #[arg(long)]
+        content: bool,
+
+        /// Highlight search terms in output
+        #[arg(long, default_value = "true")]
+        highlight: bool,
     },
 
     /// Branch operations
@@ -159,6 +185,170 @@ pub enum Commands {
         /// Quiet mode - only output note ID
         #[arg(short, long)]
         quiet: bool,
+    },
+
+    /// Link management operations
+    Link {
+        #[command(subcommand)]
+        command: LinkCommands,
+    },
+
+    /// Tag management and filtering
+    Tag {
+        #[command(subcommand)]
+        command: TagCommands,
+    },
+
+    /// Template management
+    Template {
+        #[command(subcommand)]
+        command: TemplateCommands,
+    },
+
+    /// Quick capture mode for rapid note creation
+    Quick {
+        /// Note content (if not provided, reads from stdin)
+        content: Option<String>,
+
+        /// Note title (auto-generated if not provided)
+        #[arg(short, long)]
+        title: Option<String>,
+
+        /// Tags to add (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
+
+        /// Input format (auto, markdown, json, todo)
+        #[arg(short, long, default_value = "auto")]
+        format: String,
+
+        /// Batch mode delimiter
+        #[arg(long)]
+        batch: Option<String>,
+
+        /// Quiet mode - only output note IDs
+        #[arg(short, long)]
+        quiet: bool,
+
+        /// Inbox note ID (overrides config)
+        #[arg(long)]
+        inbox: Option<String>,
+    },
+
+    /// Import from Obsidian vault
+    ImportObsidian {
+        /// Path to Obsidian vault directory
+        vault_path: PathBuf,
+
+        /// Parent note ID to import into
+        #[arg(short, long)]
+        parent: Option<String>,
+
+        /// Dry run - show what would be imported without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Export to Obsidian vault format
+    ExportObsidian {
+        /// Note ID to export (exports all descendants)
+        note_id: String,
+
+        /// Output vault directory path
+        vault_path: PathBuf,
+
+        /// Dry run - show what would be exported without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Import from Notion export (ZIP format)
+    ImportNotion {
+        /// Path to Notion export ZIP file
+        zip_path: PathBuf,
+
+        /// Parent note ID to import into
+        #[arg(short, long)]
+        parent: Option<String>,
+
+        /// Dry run - show what would be imported without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Export to Notion-compatible format
+    ExportNotion {
+        /// Note ID to export (exports all descendants)
+        note_id: String,
+
+        /// Output directory path
+        output_path: PathBuf,
+
+        /// Dry run - show what would be exported without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Bulk import from directory
+    ImportDir {
+        /// Directory path to import from
+        dir_path: PathBuf,
+
+        /// Parent note ID to import into
+        #[arg(short, long)]
+        parent: Option<String>,
+
+        /// Maximum directory depth to traverse
+        #[arg(short = 'd', long)]
+        max_depth: Option<usize>,
+
+        /// File patterns to match (glob patterns)
+        #[arg(short = 'p', long)]
+        patterns: Vec<String>,
+
+        /// Dry run - show what would be imported without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Git repository synchronization
+    SyncGit {
+        /// Git repository path
+        repo_path: PathBuf,
+
+        /// Note ID to sync (if not provided, uses root)
+        #[arg(short, long)]
+        note_id: Option<String>,
+
+        /// Git branch to work with
+        #[arg(short, long)]
+        branch: Option<String>,
+
+        /// Operation type: import, export, sync
+        #[arg(short, long, default_value = "sync")]
+        operation: String,
+
+        /// Dry run - show what would be done without making changes
+        #[arg(long)]
+        dry_run: bool,
+    },
+
+    /// Plugin management
+    Plugin {
+        #[command(subcommand)]
+        command: PluginCommands,
+    },
+
+    /// Shell completion management
+    Completion {
+        #[command(subcommand)]
+        command: CompletionCommands,
+    },
+
+    /// Show help information
+    Help {
+        /// Command or topic to get help for
+        topic: Option<String>,
     },
 }
 
@@ -455,5 +645,412 @@ pub enum AttachmentCommands {
         /// Force delete without confirmation
         #[arg(short, long)]
         force: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum LinkCommands {
+    /// Show backlinks to a note
+    Backlinks {
+        /// Note ID
+        note_id: String,
+        
+        /// Show context around links
+        #[arg(short, long)]
+        context: bool,
+    },
+
+    /// Show outgoing links from a note
+    Outgoing {
+        /// Note ID
+        note_id: String,
+    },
+
+    /// Find and report broken links
+    Broken {
+        /// Note ID to check (if not provided, checks all notes)
+        note_id: Option<String>,
+        
+        /// Fix broken links interactively
+        #[arg(short, long)]
+        fix: bool,
+    },
+
+    /// Update links in bulk
+    Update {
+        /// Old target (note ID or title)
+        old_target: String,
+        
+        /// New target (note ID or title)
+        new_target: String,
+        
+        /// Dry run (show what would be changed)
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+
+    /// Validate all links in a note
+    Validate {
+        /// Note ID
+        note_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TagCommands {
+    /// List all tags with hierarchy
+    List {
+        /// Filter pattern (supports wildcards)
+        #[arg(short, long)]
+        pattern: Option<String>,
+        
+        /// Show as tree view
+        #[arg(short, long)]
+        tree: bool,
+        
+        /// Include usage counts
+        #[arg(short, long)]
+        counts: bool,
+    },
+
+    /// Search notes by tags
+    Search {
+        /// Tag pattern to search for
+        pattern: String,
+        
+        /// Include child tags
+        #[arg(short, long)]
+        include_children: bool,
+        
+        /// Limit number of results
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+    },
+
+    /// Show tag cloud/frequency visualization
+    Cloud {
+        /// Minimum tag frequency to show
+        #[arg(short, long, default_value = "1")]
+        min_count: usize,
+        
+        /// Maximum number of tags to show
+        #[arg(short, long, default_value = "50")]
+        max_tags: usize,
+    },
+
+    /// Add tag to note
+    Add {
+        /// Note ID
+        note_id: String,
+        
+        /// Tag name (without # prefix)
+        tag: String,
+    },
+
+    /// Remove tag from note
+    Remove {
+        /// Note ID
+        note_id: String,
+        
+        /// Tag name (without # prefix)
+        tag: String,
+    },
+
+    /// Rename tag across all notes
+    Rename {
+        /// Old tag name
+        old_tag: String,
+        
+        /// New tag name
+        new_tag: String,
+        
+        /// Dry run (show what would be changed)
+        #[arg(short, long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum TemplateCommands {
+    /// List available templates
+    List {
+        /// Show template details
+        #[arg(short, long)]
+        detailed: bool,
+    },
+
+    /// Create a new template
+    Create {
+        /// Template title
+        title: String,
+        
+        /// Template content (if not provided, opens editor)
+        #[arg(short, long)]
+        content: Option<String>,
+        
+        /// Template description
+        #[arg(short, long)]
+        description: Option<String>,
+        
+        /// Open in editor
+        #[arg(short, long)]
+        edit: bool,
+    },
+
+    /// Show template details
+    Show {
+        /// Template ID or title
+        template: String,
+        
+        /// Show template variables
+        #[arg(short, long)]
+        variables: bool,
+    },
+
+    /// Create note from template
+    Use {
+        /// Template ID or title
+        template: String,
+        
+        /// Parent note ID
+        #[arg(short, long)]
+        parent: Option<String>,
+        
+        /// Template variables in key=value format
+        #[arg(short = 'v', long)]
+        variables: Vec<String>,
+        
+        /// Interactive variable input
+        #[arg(short, long)]
+        interactive: bool,
+        
+        /// Open created note in editor
+        #[arg(short, long)]
+        edit: bool,
+    },
+
+    /// Update existing template
+    Update {
+        /// Template ID
+        template_id: String,
+        
+        /// New title
+        #[arg(short, long)]
+        title: Option<String>,
+        
+        /// New description
+        #[arg(short, long)]
+        description: Option<String>,
+        
+        /// Open in editor
+        #[arg(short, long)]
+        edit: bool,
+    },
+
+    /// Delete template
+    Delete {
+        /// Template ID
+        template_id: String,
+        
+        /// Force delete without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+
+    /// Validate template syntax
+    Validate {
+        /// Template ID or path to template file
+        template: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum ProfileCommands {
+    /// List all profiles
+    List {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+    },
+    
+    /// Show profile information
+    Show {
+        /// Profile name (shows current if not specified)
+        name: Option<String>,
+    },
+    
+    /// Create a new profile
+    Create {
+        /// Profile name
+        name: String,
+        
+        /// Profile description
+        #[arg(short, long)]
+        description: Option<String>,
+        
+        /// Copy settings from another profile
+        #[arg(short, long)]
+        from: Option<String>,
+        
+        /// Set as current profile after creation
+        #[arg(long)]
+        set_current: bool,
+    },
+    
+    /// Delete a profile
+    Delete {
+        /// Profile name
+        name: String,
+        
+        /// Force delete without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+    
+    /// Set current profile
+    Set {
+        /// Profile name
+        name: String,
+    },
+    
+    /// Copy profile settings
+    Copy {
+        /// Source profile name
+        from: String,
+        
+        /// Destination profile name
+        to: String,
+        
+        /// Overwrite destination if it exists
+        #[arg(long)]
+        overwrite: bool,
+    },
+    
+    /// Configure profile settings
+    Configure {
+        /// Profile name (current profile if not specified)
+        #[arg(short, long)]
+        profile: Option<String>,
+        
+        /// Configuration key to set
+        #[arg(short, long)]
+        key: Option<String>,
+        
+        /// Configuration value
+        #[arg(short, long)]
+        value: Option<String>,
+        
+        /// Interactive configuration mode
+        #[arg(short, long)]
+        interactive: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum PluginCommands {
+    /// List installed plugins
+    List {
+        /// Show detailed information
+        #[arg(short, long)]
+        detailed: bool,
+        
+        /// Filter by capability
+        #[arg(short, long)]
+        capability: Option<String>,
+    },
+    
+    /// Install a plugin
+    Install {
+        /// Plugin path or URL
+        source: String,
+        
+        /// Force installation
+        #[arg(short, long)]
+        force: bool,
+        
+        /// Trust the plugin (enables extended permissions)
+        #[arg(long)]
+        trust: bool,
+    },
+    
+    /// Uninstall a plugin
+    Uninstall {
+        /// Plugin name
+        name: String,
+        
+        /// Force uninstall without confirmation
+        #[arg(short, long)]
+        force: bool,
+    },
+    
+    /// Enable a plugin
+    Enable {
+        /// Plugin name
+        name: String,
+    },
+    
+    /// Disable a plugin
+    Disable {
+        /// Plugin name
+        name: String,
+    },
+    
+    /// Show plugin information
+    Info {
+        /// Plugin name
+        name: String,
+    },
+    
+    /// Run a plugin command
+    Run {
+        /// Plugin name
+        plugin: String,
+        
+        /// Command name
+        command: String,
+        
+        /// Command arguments
+        args: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CompletionCommands {
+    /// Generate completion script
+    Generate {
+        /// Shell type (bash, zsh, fish, powershell, elvish)
+        shell: String,
+        
+        /// Output file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    
+    /// Install completion script for current shell
+    Install {
+        /// Shell type (auto-detect if not specified)
+        #[arg(short, long)]
+        shell: Option<String>,
+    },
+    
+    /// Manage completion cache
+    Cache {
+        #[command(subcommand)]
+        command: CompletionCacheCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum CompletionCacheCommands {
+    /// Clear completion cache
+    Clear,
+    
+    /// Show cache status
+    Status,
+    
+    /// Refresh cache for specific completion type
+    Refresh {
+        /// Completion type (notes, profiles, commands, etc.)
+        completion_type: String,
     },
 }

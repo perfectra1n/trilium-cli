@@ -1,9 +1,9 @@
-use crate::tui::app::{App, InputMode, ViewMode};
+use crate::tui::app::{App, InputMode, ViewMode, SplitPane};
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap, Clear},
     Frame,
 };
 
@@ -25,17 +25,31 @@ pub fn draw(f: &mut Frame, app: &App) {
     if matches!(app.input_mode, InputMode::Editing | InputMode::Search | InputMode::Command) {
         draw_input_popup(f, app);
     }
+    
+    // Draw fuzzy search popup
+    if matches!(app.input_mode, InputMode::FuzzySearch) {
+        draw_fuzzy_search_popup(f, app);
+    }
 }
 
 fn draw_title(f: &mut Frame, app: &App, area: Rect) {
-    let title = format!(" Trilium CLI - {} ", 
-        match app.view_mode {
-            ViewMode::Tree => "Tree View",
-            ViewMode::Content => "Note Content",
-            ViewMode::Attributes => "Attributes",
-            ViewMode::Search => "Search Results",
-        }
-    );
+    let mode_text = match app.view_mode {
+        ViewMode::Tree => "Tree View",
+        ViewMode::Content => "Note Content",
+        ViewMode::Attributes => "Attributes",
+        ViewMode::Search => "Search Results",
+        ViewMode::Recent => "Recent Notes",
+        ViewMode::Bookmarks => "Bookmarked Notes",
+        ViewMode::Split => "Split View",
+    };
+    
+    let search_indicator = if app.input_mode == InputMode::FuzzySearch {
+        " [SEARCHING]"
+    } else {
+        ""
+    };
+    
+    let title = format!(" Trilium CLI - {}{} ", mode_text, search_indicator);
     
     let block = Block::default()
         .borders(Borders::ALL)
@@ -47,21 +61,48 @@ fn draw_title(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn draw_main_content(f: &mut Frame, app: &App, area: Rect) {
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(30),  // Left panel (tree)
-            Constraint::Percentage(70),  // Right panel (content)
-        ])
-        .split(area);
-
-    draw_tree_panel(f, app, chunks[0]);
-    
     match app.view_mode {
-        ViewMode::Content => draw_content_panel(f, app, chunks[1]),
-        ViewMode::Attributes => draw_attributes_panel(f, app, chunks[1]),
-        ViewMode::Search => draw_search_results(f, app, chunks[1]),
-        _ => draw_content_panel(f, app, chunks[1]),
+        ViewMode::Split => {
+            let split_ratio = (app.split_ratio * 100.0) as u16;
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(split_ratio),
+                    Constraint::Percentage(100 - split_ratio),
+                ])
+                .split(area);
+
+            // Draw tree in left pane
+            draw_tree_panel_with_focus(f, app, chunks[0], app.split_pane_focused == SplitPane::Left);
+            
+            // Draw content in right pane
+            draw_content_panel_with_focus(f, app, chunks[1], app.split_pane_focused == SplitPane::Right);
+        }
+        ViewMode::Recent => {
+            draw_recent_notes(f, app, area);
+        }
+        ViewMode::Bookmarks => {
+            draw_bookmarks(f, app, area);
+        }
+        _ => {
+            // Original layout for other modes
+            let chunks = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage(30),  // Left panel (tree)
+                    Constraint::Percentage(70),  // Right panel (content)
+                ])
+                .split(area);
+
+            draw_tree_panel(f, app, chunks[0]);
+            
+            match app.view_mode {
+                ViewMode::Content => draw_content_panel(f, app, chunks[1]),
+                ViewMode::Attributes => draw_attributes_panel(f, app, chunks[1]),
+                ViewMode::Search => draw_search_results(f, app, chunks[1]),
+                _ => draw_content_panel(f, app, chunks[1]),
+            }
+        }
     }
 }
 
@@ -79,7 +120,13 @@ fn draw_tree_panel(f: &mut Frame, app: &App, area: Rect) {
             "▶ "
         };
         
-        let content = format!("{}{}{}", indent, prefix, item.note.title);
+        let bookmark_indicator = if app.config.is_bookmarked(&item.note.note_id) {
+            "★ "
+        } else {
+            ""
+        };
+        
+        let content = format!("{}{}{}{}", indent, prefix, bookmark_indicator, item.note.title);
         
         let style = if index == app.selected_index {
             Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
@@ -151,19 +198,27 @@ fn draw_content_panel(f: &mut Frame, app: &App, area: Rect) {
                 Style::default().fg(Color::Gray),
             )),
             Line::from(""),
-            Line::from(Span::styled("Keyboard Shortcuts:", Style::default().add_modifier(Modifier::BOLD))),
+            Line::from(Span::styled("Enhanced Navigation Features:", Style::default().add_modifier(Modifier::BOLD))),
             Line::from(""),
-            Line::from("  ↑/↓ or j/k  - Navigate tree"),
-            Line::from("  ←/→ or h/l  - Collapse/Expand"),
-            Line::from("  Enter       - Load note"),
-            Line::from("  Tab         - Switch view"),
-            Line::from("  /           - Search"),
-            Line::from("  :           - Command mode"),
-            Line::from("  n           - New note"),
-            Line::from("  e           - Edit note"),
-            Line::from("  d           - Delete note"),
-            Line::from("  r           - Refresh tree"),
-            Line::from("  q           - Quit"),
+            Line::from("  j/k or ↑/↓    - Navigate up/down"),
+            Line::from("  h/l or ←/→    - Left/right (collapse/expand)"),
+            Line::from("  g/G           - Go to top/bottom"),
+            Line::from("  o/Enter       - Open/load note"),
+            Line::from("  c             - Collapse current"),
+            Line::from(""),
+            Line::from("  /             - Fuzzy search (real-time)"),
+            Line::from("  n/N           - Next/previous search match"),
+            Line::from(""),
+            Line::from("  R             - Recent notes"),
+            Line::from("  B             - Bookmarks"),
+            Line::from("  b             - Toggle bookmark"),
+            Line::from(""),
+            Line::from("  s             - Split view"),
+            Line::from("  < / >         - Resize split panes"),
+            Line::from(""),
+            Line::from("  Tab           - Cycle views"),
+            Line::from("  r             - Refresh tree"),
+            Line::from("  q             - Quit"),
         ])
     };
 
@@ -292,6 +347,297 @@ fn draw_input_popup(f: &mut Frame, app: &App) {
 
     f.render_widget(Block::default().style(Style::default().bg(Color::Black)), area);
     f.render_widget(input, area);
+}
+
+fn draw_tree_panel_with_focus(f: &mut Frame, app: &App, area: Rect, focused: bool) {
+    let mut items: Vec<ListItem> = Vec::new();
+    let visible_items = get_visible_tree_items(app);
+    
+    for (index, item) in visible_items.iter().enumerate() {
+        let indent = "  ".repeat(item.depth);
+        let prefix = if item.children.is_empty() {
+            "  "
+        } else if item.is_expanded {
+            "▼ "
+        } else {
+            "▶ "
+        };
+        
+        let bookmark_indicator = if app.config.is_bookmarked(&item.note.note_id) {
+            "★ "
+        } else {
+            ""
+        };
+        
+        let content = format!("{}{}{}{}", indent, prefix, bookmark_indicator, item.note.title);
+        
+        let style = if index == app.selected_index {
+            Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default()
+        };
+        
+        items.push(ListItem::new(content).style(style));
+    }
+
+    let border_color = if focused { Color::Yellow } else { Color::White };
+    
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Notes Tree ")
+                .border_style(Style::default().fg(border_color))
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    f.render_widget(list, area);
+}
+
+fn draw_content_panel_with_focus(f: &mut Frame, app: &App, area: Rect, focused: bool) {
+    let content = if let Some(note) = &app.current_note {
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled("Title: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(&note.title),
+            ]),
+            Line::from(vec![
+                Span::styled("ID: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(&note.note_id),
+            ]),
+            Line::from(vec![
+                Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(&note.note_type),
+            ]),
+            Line::from(""),
+            Line::from("─".repeat(area.width as usize - 2)),
+            Line::from(""),
+        ];
+
+        if let Some(content) = &app.current_content {
+            for line in content.lines().skip(app.content_scroll) {
+                lines.push(Line::from(line.to_string()));
+            }
+        } else {
+            lines.push(Line::from(Span::styled(
+                "Loading content...",
+                Style::default().fg(Color::Gray),
+            )));
+        }
+
+        Text::from(lines)
+    } else {
+        Text::from(vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "Select a note to view its content",
+                Style::default().fg(Color::Gray),
+            )),
+        ])
+    };
+
+    let border_color = if focused { Color::Yellow } else { Color::White };
+
+    let paragraph = Paragraph::new(content)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Content ")
+                .border_style(Style::default().fg(border_color))
+        )
+        .wrap(Wrap { trim: false });
+
+    f.render_widget(paragraph, area);
+}
+
+fn draw_recent_notes(f: &mut Frame, app: &App, area: Rect) {
+    let mut items: Vec<ListItem> = Vec::new();
+    
+    let recent_notes = app.config.current_profile()
+        .map(|p| p.recent_notes.as_slice())
+        .unwrap_or(&[]);
+    
+    if recent_notes.is_empty() {
+        items.push(ListItem::new(Span::styled(
+            "No recent notes",
+            Style::default().fg(Color::Gray),
+        )));
+    } else {
+        for (index, recent_note) in recent_notes.iter().enumerate() {
+            let style = if index == app.recent_selected_index {
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            let time_ago = format_time_ago(&recent_note.accessed_at);
+            let content = format!("{} ({})", recent_note.title, time_ago);
+            items.push(ListItem::new(content).style(style));
+        }
+    }
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Recent Notes ")
+                .border_style(Style::default().fg(Color::White))
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    f.render_widget(list, area);
+}
+
+fn draw_bookmarks(f: &mut Frame, app: &App, area: Rect) {
+    let mut items: Vec<ListItem> = Vec::new();
+    
+    let bookmarked_notes = app.config.current_profile()
+        .map(|p| p.bookmarked_notes.as_slice())
+        .unwrap_or(&[]);
+    
+    if bookmarked_notes.is_empty() {
+        items.push(ListItem::new(Span::styled(
+            "No bookmarked notes",
+            Style::default().fg(Color::Gray),
+        )));
+    } else {
+        for (index, bookmark) in bookmarked_notes.iter().enumerate() {
+            let style = if index == app.bookmark_selected_index {
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            let time_ago = format_time_ago(&bookmark.bookmarked_at);
+            let content = format!("★ {} ({})", bookmark.title, time_ago);
+            items.push(ListItem::new(content).style(style));
+        }
+    }
+
+    let list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Bookmarked Notes ")
+                .border_style(Style::default().fg(Color::Yellow))
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    f.render_widget(list, area);
+}
+
+fn draw_fuzzy_search_popup(f: &mut Frame, app: &App) {
+    let area = centered_rect(80, 70, f.size());
+    
+    f.render_widget(Clear, area);
+    
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),  // Search input
+            Constraint::Min(0),     // Results
+        ])
+        .split(area);
+
+    // Search input
+    let input = Paragraph::new(app.fuzzy_search_query.as_str())
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(" Fuzzy Search ")
+                .border_style(Style::default().fg(Color::Yellow))
+        );
+    f.render_widget(input, chunks[0]);
+
+    // Search results
+    let mut items: Vec<ListItem> = Vec::new();
+    
+    if app.fuzzy_search_query.is_empty() {
+        items.push(ListItem::new(Span::styled(
+            "Type to search notes...",
+            Style::default().fg(Color::Gray),
+        )));
+    } else if app.fuzzy_search_results.is_empty() {
+        items.push(ListItem::new(Span::styled(
+            "No matches found",
+            Style::default().fg(Color::Gray),
+        )));
+    } else {
+        for (index, result) in app.fuzzy_search_results.iter().enumerate() {
+            let style = if index == app.fuzzy_selected_index {
+                Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            
+            // Highlight matched characters
+            let title = highlight_fuzzy_matches(&result.item.note.title, &result.indices);
+            items.push(ListItem::new(title).style(style));
+        }
+    }
+
+    let results_list = List::new(items)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!(" Results ({}) ", app.fuzzy_search_results.len()))
+                .border_style(Style::default().fg(Color::White))
+        )
+        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_symbol("> ");
+
+    f.render_widget(results_list, chunks[1]);
+}
+
+fn highlight_fuzzy_matches(text: &str, indices: &[usize]) -> Line<'static> {
+    let mut spans = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut last_index = 0;
+    
+    for &match_index in indices {
+        if match_index > last_index {
+            // Add non-matching characters
+            let segment: String = chars[last_index..match_index].iter().collect();
+            if !segment.is_empty() {
+                spans.push(Span::raw(segment));
+            }
+        }
+        
+        // Add matching character with highlight
+        if match_index < chars.len() {
+            let segment: String = chars[match_index..match_index + 1].iter().collect();
+            spans.push(Span::styled(segment, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)));
+            last_index = match_index + 1;
+        }
+    }
+    
+    // Add remaining characters
+    if last_index < chars.len() {
+        let segment: String = chars[last_index..].iter().collect();
+        if !segment.is_empty() {
+            spans.push(Span::raw(segment));
+        }
+    }
+    
+    Line::from(spans)
+}
+
+fn format_time_ago(time: &chrono::DateTime<chrono::Utc>) -> String {
+    let now = chrono::Utc::now();
+    let diff = now.signed_duration_since(*time);
+    
+    if diff.num_days() > 0 {
+        format!("{}d ago", diff.num_days())
+    } else if diff.num_hours() > 0 {
+        format!("{}h ago", diff.num_hours())
+    } else if diff.num_minutes() > 0 {
+        format!("{}m ago", diff.num_minutes())
+    } else {
+        "just now".to_string()
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {

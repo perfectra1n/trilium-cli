@@ -231,7 +231,6 @@ pub static CODE_PATTERNS: Lazy<Vec<(Regex, &'static str)>> = Lazy::new(|| {
 
 // Format detection module
 pub mod format_detector {
-    use super::*;
     use serde_json;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -356,7 +355,6 @@ pub mod format_detector {
 // Content processor module
 pub mod content_processor {
     use super::format_detector::ContentFormat;
-    use regex::Regex;
     use scraper::{Html, Selector};
     use html2md;
 
@@ -614,7 +612,7 @@ pub async fn handle(
 
     // Create the note
     let client = TriliumClient::new(config)?;
-    let parent_id = parent.unwrap_or_else(|| config.default_parent_id.clone());
+    let parent_id = parent.unwrap_or_else(|| config.current_profile().unwrap().default_parent_id.clone());
 
     let request = CreateNoteRequest {
         parent_note_id: parent_id,
@@ -702,7 +700,7 @@ async fn handle_batch_mode(
 
     let parts: Vec<&str> = input.split(&delimiter).collect();
     let client = TriliumClient::new(config)?;
-    let parent_id = parent.unwrap_or_else(|| config.default_parent_id.clone());
+    let parent_id = parent.unwrap_or_else(|| config.current_profile().unwrap().default_parent_id.clone());
 
     if !quiet {
         println!("{} Creating {} notes in batch mode...", 

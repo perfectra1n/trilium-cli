@@ -20,7 +20,7 @@ pub async fn handle(command: NoteCommands, config: &Config, output_format: &str)
             parent,
             edit,
         } => {
-            let parent_id = parent.unwrap_or_else(|| config.default_parent_id.clone());
+            let parent_id = parent.unwrap_or_else(|| config.current_profile().unwrap().default_parent_id.clone());
             
             let final_content = if edit {
                 edit_content(content.as_deref(), config)?
@@ -248,7 +248,6 @@ fn build_tree<'a>(
 fn edit_content(initial_content: Option<&str>, config: &Config) -> Result<String> {
     use tempfile::NamedTempFile;
     use std::process::Command;
-    use std::path::Path;
 
     let mut temp_file = NamedTempFile::new()?;
     if let Some(content) = initial_content {
@@ -256,7 +255,7 @@ fn edit_content(initial_content: Option<&str>, config: &Config) -> Result<String
     }
     temp_file.flush()?;
 
-    let editor = config.editor.clone()
+    let editor = config.current_profile().unwrap().editor.clone()
         .or_else(|| std::env::var("EDITOR").ok())
         .unwrap_or_else(|| "vi".to_string());
 
@@ -331,7 +330,7 @@ pub fn validate_editor(editor_string: &str) -> Result<ValidatedEditor> {
     })
 }
 
-fn detect_format(path: &PathBuf) -> String {
+fn detect_format(path: &Path) -> String {
     match path.extension().and_then(|s| s.to_str()) {
         Some("html") | Some("htm") => "html".to_string(),
         Some("md") | Some("markdown") => "markdown".to_string(),

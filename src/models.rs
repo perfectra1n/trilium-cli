@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {
     pub note_id: String,
@@ -93,7 +93,7 @@ pub struct UpdateBranchRequest {
     pub is_expanded: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Attribute {
     pub attribute_id: String,
@@ -201,7 +201,7 @@ pub struct CalendarNote {
 }
 
 // Tree structure for TUI
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NoteTreeItem {
     pub note: Note,
     pub children: Vec<NoteTreeItem>,
@@ -218,5 +218,107 @@ impl NoteTreeItem {
             depth,
         }
     }
+}
 
+// Enhanced search options
+#[derive(Debug, Clone, Default)]
+pub struct SearchOptions {
+    pub fast_search: bool,
+    pub include_archived: bool,
+    pub limit: usize,
+    pub regex_mode: bool,
+    pub include_content: bool,
+    pub context_lines: usize,
+}
+
+// Enhanced search result with highlighting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnhancedSearchResult {
+    pub note_id: String,
+    pub title: String,
+    pub path: String,
+    pub score: f64,
+    pub content: Option<String>,
+    pub highlighted_snippets: Vec<HighlightedSnippet>,
+    pub context_lines: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HighlightedSnippet {
+    pub line_number: usize,
+    pub content: String,
+    pub highlights: Vec<TextHighlight>,
+    pub context_before: Vec<String>,
+    pub context_after: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TextHighlight {
+    pub start: usize,
+    pub end: usize,
+    pub match_text: String,
+}
+
+// Link reference for backlink tracking
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinkReference {
+    pub from_note_id: String,
+    pub to_note_id: String,
+    pub from_title: String,
+    pub link_text: String,
+    pub context: String,
+}
+
+// Parsed wiki-style link
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParsedLink {
+    pub link_type: LinkType,
+    pub target: String,
+    pub display_text: Option<String>,
+    pub start_pos: usize,
+    pub end_pos: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum LinkType {
+    NoteId,
+    NoteTitle,
+}
+
+// Tag information with hierarchy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagInfo {
+    pub name: String,
+    pub hierarchy: Vec<String>,
+    pub count: usize,
+    pub parent: Option<String>,
+    pub children: Vec<String>,
+}
+
+// Template system
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Template {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub variables: Vec<TemplateVariable>,
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateVariable {
+    pub name: String,
+    pub description: String,
+    pub default_value: Option<String>,
+    pub required: bool,
+}
+
+// Quick capture/inbox note
+#[derive(Debug, Clone, Default)]
+pub struct QuickCaptureRequest {
+    pub content: String,
+    pub tags: Vec<String>,
+    pub title: Option<String>,
+    pub inbox_note_id: Option<String>,
+    pub metadata: std::collections::HashMap<String, String>,
 }

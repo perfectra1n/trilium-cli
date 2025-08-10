@@ -19,9 +19,9 @@ pub async fn handle(config: &Config) -> Result<()> {
             println!("{}: {}", "Server Time".bold(), info.utc_date_time.format("%Y-%m-%d %H:%M:%S UTC"));
             println!("\n{}", "Connection Information".bold().blue());
             println!("{}", "─".repeat(50));
-            println!("{}: {}", "Server URL".bold(), config.server_url);
+            println!("{}: {}", "Server URL".bold(), config.current_profile().unwrap().server_url);
             println!("{}: {}", "Authentication".bold(), 
-                if config.api_token.is_some() { 
+                if config.current_profile().unwrap().api_token.is_some() { 
                     "Configured".green().to_string() 
                 } else { 
                     "Not configured".red().to_string() 
@@ -30,7 +30,7 @@ pub async fn handle(config: &Config) -> Result<()> {
         }
         Err(e) => {
             eprintln!("{} Failed to connect to Trilium server: {}", "✗".red().bold(), e);
-            eprintln!("Server URL: {}", config.server_url);
+            eprintln!("Server URL: {}", config.current_profile().unwrap().server_url);
             eprintln!("Please check your configuration and ensure the server is running.");
         }
     }

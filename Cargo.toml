@@ -20,7 +20,7 @@ clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
 
 # TUI framework
 ratatui = "0.26"
-crossterm = "0.27"
+crossterm = { version = "0.27", features = ["event-stream"] }
 
 # Async runtime
 tokio = { version = "1.38", features = ["full"] }
@@ -61,11 +61,30 @@ base64 = "0.22"
 # Table formatting for CLI output
 comfy-table = "7.1"
 
-# Progress indicators
+# Progress indicators and UI
 indicatif = "0.17"
+console = "0.15"
 
 # URL handling
 url = "2.5"
+
+# Plugin system and dynamic loading
+libloading = "0.8"
+dlopen = "0.1"
+serde_derive = "1.0"
+
+# Shell completion
+clap_complete = "4.5"
+
+# String similarity for did-you-mean suggestions
+strsim = "0.10"
+
+# Environment variable parsing
+envy = "0.4"
+
+
+# Config file formats
+toml = "0.8"
 
 # MIME type detection
 mime_guess = "2.0"
@@ -77,12 +96,32 @@ scraper = "0.18"
 # Regular expressions
 regex = "1.10"
 
+# Cryptographic hashing
+sha2 = "0.10"
+
 # Stdin detection
 atty = "0.2"
 
 # Security dependencies
 zeroize = { version = "1.7", features = ["derive"] }
 once_cell = "1.19"
+
+# Fuzzy search
+fuzzy-matcher = "0.3"
+
+# UUID generation for templates
+uuid = { version = "1.8", features = ["v4"] }
+
+# Import/Export dependencies
+walkdir = "2.4"
+zip = "0.6"
+gray_matter = "0.2"
+git2 = { version = "0.18", optional = true }
+markdown = "1.0"
+pulldown-cmark = "0.9"
+glob = "0.3"
+md5 = "0.7"
+html-escape = "0.2"
 
 [dev-dependencies]
 # Testing utilities

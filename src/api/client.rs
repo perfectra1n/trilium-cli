@@ -17,15 +17,16 @@ pub struct TriliumClient {
 
 impl TriliumClient {
     pub fn new(config: &Config) -> Result<Self> {
+        let profile = config.current_profile()?;
         let client = Client::builder()
-            .timeout(Duration::from_secs(config.timeout_seconds))
+            .timeout(Duration::from_secs(profile.timeout_seconds))
             .build()
-            .map_err(|e| TriliumError::HttpError(e))?;
+            .map_err(TriliumError::HttpError)?;
 
         Ok(Self {
             client,
-            base_url: config.server_url.clone(),
-            api_token: config.api_token.clone(),
+            base_url: profile.server_url.clone(),
+            api_token: profile.api_token.clone(),
         })
     }
 
@@ -66,7 +67,7 @@ impl TriliumClient {
             response
                 .json::<T>()
                 .await
-                .map_err(|e| TriliumError::HttpError(e))
+                .map_err(TriliumError::HttpError)
         } else {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             match status {
@@ -252,7 +253,7 @@ impl TriliumClient {
         let title = title.unwrap_or_else(|| file_name.to_string());
 
         let file_content = std::fs::read(file_path)
-            .map_err(|e| TriliumError::IoError(e))?;
+            .map_err(TriliumError::IoError)?;
 
         let url = self.build_url(&format!("/notes/{}/attachments", note_id));
         let mut request = self.client.post(&url);
@@ -415,6 +416,192 @@ impl TriliumClient {
 
         Ok(children)
     }
+
+    // Enhanced search with regex and highlighting support
+    pub async fn search_notes_enhanced(&self, query: &str, options: SearchOptions) -> Result<Vec<EnhancedSearchResult>> {
+        let mut params = HashMap::new();
+        params.insert("search", query.to_string());
+        params.insert("fastSearch", options.fast_search.to_string());
+        params.insert("includeArchivedNotes", options.include_archived.to_string());
+        params.insert("limit", options.limit.to_string());
+        
+        if options.regex_mode {
+            params.insert("regexMode", "true".to_string());
+        }
+
+        let url = self.build_url("/notes");
+        let mut request = self.client.get(&url).query(&params);
+
+        if let Some(token) = &self.api_token {
+            request = request.header("Authorization", token.as_str());
+        }
+
+        let response = request.send().await?;
+        let search_response: SearchResponse = self.handle_response(response).await?;
+        
+        // Enhanced processing for highlighting and context
+        let mut enhanced_results = Vec::new();
+        for result in search_response.results {
+            let content = if options.include_content {
+                match self.get_note_content(&result.note_id).await {
+                    Ok(content) => Some(content),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            enhanced_results.push(EnhancedSearchResult {
+                note_id: result.note_id,
+                title: result.title,
+                path: result.path,
+                score: result.score,
+                content,
+                highlighted_snippets: Vec::new(), // Will be populated by utility functions
+                context_lines: options.context_lines,
+            });
+        }
+        
+        Ok(enhanced_results)
+    }
+
+    // Get notes that link to a specific note (backlinks)
+    pub async fn get_backlinks(&self, note_id: &str) -> Result<Vec<LinkReference>> {
+        // First, search for notes containing links to this note
+        let title_query = format!("[[{}]]", note_id);
+        
+        // Search by ID pattern
+        let id_results = self.search_notes(&title_query, false, true, 1000).await?;
+        
+        // Also search by title if we can get the note
+        let mut all_results = id_results;
+        if let Ok(target_note) = self.get_note(note_id).await {
+            let title_query = format!("[[{}]]", target_note.title);
+            let title_results = self.search_notes(&title_query, false, true, 1000).await?;
+            all_results.extend(title_results);
+        }
+
+        // Convert to LinkReference format
+        let mut backlinks = Vec::new();
+        for result in all_results {
+            if result.note_id != note_id { // Don't include self-references
+                if let Ok(_content) = self.get_note_content(&result.note_id).await {
+                    backlinks.push(LinkReference {
+                        from_note_id: result.note_id,
+                        to_note_id: note_id.to_string(),
+                        from_title: result.title,
+                        link_text: String::new(), // Will be extracted from content
+                        context: String::new(),   // Will be extracted from content
+                    });
+                }
+            }
+        }
+
+        Ok(backlinks)
+    }
+
+    // Get all links from a note's content
+    pub async fn get_outgoing_links(&self, note_id: &str) -> Result<Vec<LinkReference>> {
+        let _content = self.get_note_content(note_id).await?;
+        let _source_note = self.get_note(note_id).await?;
+        
+        let links = Vec::new();
+        // This will be implemented with regex parsing utilities
+        // For now, return empty vector
+        
+        Ok(links)
+    }
+
+    // Get all tags with their hierarchy
+    pub async fn get_all_tags(&self) -> Result<Vec<TagInfo>> {
+        // Search for all label attributes that represent tags
+        let results = self.search_notes("#", false, true, 10000).await?;
+        let mut tags = std::collections::HashSet::new();
+        
+        for result in results {
+            if let Ok(attributes) = self.get_note_attributes(&result.note_id).await {
+                for attr in attributes {
+                    if attr.attr_type == "label" {
+                        tags.insert(attr.name);
+                    }
+                }
+            }
+        }
+        
+        // Convert to TagInfo with hierarchy parsing
+        let mut tag_infos = Vec::new();
+        for tag in tags {
+            let parts: Vec<&str> = tag.split('/').collect();
+            tag_infos.push(TagInfo {
+                name: tag.clone(),
+                hierarchy: parts.iter().map(|s| s.to_string()).collect(),
+                count: 0, // Will be calculated
+                parent: if parts.len() > 1 { 
+                    Some(parts[..parts.len()-1].join("/")) 
+                } else { 
+                    None 
+                },
+                children: Vec::new(),
+            });
+        }
+        
+        Ok(tag_infos)
+    }
+
+    // Search notes by tag pattern
+    pub async fn search_by_tags(&self, tag_pattern: &str, include_children: bool) -> Result<Vec<SearchResult>> {
+        let query = if tag_pattern.starts_with('#') {
+            tag_pattern.to_string()
+        } else {
+            format!("#{}", tag_pattern)
+        };
+        
+        self.search_notes(&query, false, true, 1000).await
+    }
+
+    // Get notes that can be used as templates
+    pub async fn get_templates(&self) -> Result<Vec<Template>> {
+        // Look for notes with #template attribute or in a templates folder
+        let template_results = self.search_notes("#template", false, true, 1000).await?;
+        let mut templates = Vec::new();
+        
+        for result in template_results {
+            if let Ok(content) = self.get_note_content(&result.note_id).await {
+                templates.push(Template {
+                    id: result.note_id,
+                    title: result.title,
+                    content,
+                    variables: Vec::new(), // Will be extracted from content
+                    description: String::new(),
+                });
+            }
+        }
+        
+        Ok(templates)
+    }
+
+    // Create note from template with variable substitution
+    pub async fn create_note_from_template(&self, template_id: &str, variables: std::collections::HashMap<String, String>, parent_id: &str) -> Result<Note> {
+        let template_content = self.get_note_content(template_id).await?;
+        let template_note = self.get_note(template_id).await?;
+        
+        // Process template variables (will be implemented with template utilities)
+        let processed_content = template_content; // Placeholder for now
+        let processed_title = template_note.title; // Placeholder for now
+        
+        let request = CreateNoteRequest {
+            parent_note_id: parent_id.to_string(),
+            title: processed_title,
+            note_type: template_note.note_type,
+            content: processed_content,
+            note_position: None,
+            prefix: None,
+            is_expanded: None,
+            is_protected: None,
+        };
+        
+        self.create_note(request).await
+    }
 }
 
 #[cfg(test)]
@@ -430,6 +617,9 @@ mod tests {
             editor: None,
             timeout_seconds: 30,
             max_retries: 3,
+            recent_notes: Vec::new(),
+            bookmarked_notes: Vec::new(),
+            max_recent_notes: 15,
         }
     }
 
@@ -462,7 +652,7 @@ mod tests {
     #[test]
     fn test_client_without_token() {
         let mut config = test_config();
-        config.api_token = None;
+        config.current_profile_mut().unwrap().api_token = None;
         let client = TriliumClient::new(&config);
         assert!(client.is_ok());
         let client = client.unwrap();
