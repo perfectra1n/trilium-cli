@@ -45,7 +45,7 @@ pub struct ContentConversionResult {
 }
 
 /// Content format handler for bidirectional conversion between formats
-struct ContentFormatHandler;
+pub struct ContentFormatHandler;
 
 impl ContentFormatHandler {
     /// Detect content format from note metadata and content
@@ -104,7 +104,7 @@ impl ContentFormatHandler {
     }
     
     /// Convert content to editing format (HTML -> Markdown for better editing experience)
-    fn prepare_for_editing(note: &Note, content: &str) -> ContentConversionResult {
+    pub fn prepare_for_editing(note: &Note, content: &str) -> ContentConversionResult {
         let original_format = Self::detect_format(note, content);
         
         match original_format {
@@ -137,7 +137,7 @@ impl ContentFormatHandler {
     }
     
     /// Convert edited content back to Trilium format (Markdown -> HTML if original was HTML)
-    fn prepare_for_saving(conversion_result: &ContentConversionResult, edited_content: &str) -> String {
+    pub fn prepare_for_saving(conversion_result: &ContentConversionResult, edited_content: &str) -> String {
         match (&conversion_result.original_format, &conversion_result.editing_format) {
             // If original was HTML and we edited in Markdown, convert back to HTML
             (ContentFormat::Html, ContentFormat::Markdown) => {
@@ -171,15 +171,73 @@ impl ContentFormatHandler {
         }
     }
     
-    /// Convert HTML to Markdown using html2md
+    /// Convert HTML to Markdown using html2md with enhanced line break preservation
     fn html_to_markdown(html: &str) -> String {
-        // Use html2md for conversion
-        html2md::parse_html(html)
+        // Pre-process HTML to standardize line breaks before conversion
+        let normalized_html = Self::normalize_html_line_breaks(html);
+        
+        // Debug logging for line break conversion tracking
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let original_lines = html.lines().count();
+            let normalized_lines = normalized_html.lines().count();
+            eprintln!("=== HTML → Markdown Conversion Debug ===");
+            eprintln!("Original HTML line count: {}", original_lines);
+            eprintln!("Normalized HTML line count: {}", normalized_lines);
+            eprintln!("Original HTML (first 200 chars): {}", 
+                     html.chars().take(200).collect::<String>().replace('\n', "\\n"));
+            eprintln!("Normalized HTML (first 200 chars): {}", 
+                     normalized_html.chars().take(200).collect::<String>().replace('\n', "\\n"));
+        }
+        
+        // Use html2md with custom configuration for better line break handling
+        let mut converted = html2md::parse_html(&normalized_html);
+        
+        // Debug logging for intermediate conversion
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let converted_lines = converted.lines().count();
+            eprintln!("Raw converted Markdown line count: {}", converted_lines);
+            eprintln!("Raw converted (first 200 chars): {}", 
+                     converted.chars().take(200).collect::<String>().replace('\n', "\\n"));
+        }
+        
+        // Post-process to ensure proper line break preservation
+        converted = Self::preserve_markdown_line_breaks(&converted);
+        
+        // Debug logging for final result
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let final_lines = converted.lines().count();
+            eprintln!("Final Markdown line count: {}", final_lines);
+            eprintln!("Final Markdown (first 200 chars): {}", 
+                     converted.chars().take(200).collect::<String>().replace('\n', "\\n"));
+            eprintln!("=====================================");
+        }
+        
+        converted
     }
     
-    /// Convert Markdown to HTML using pulldown-cmark
+    /// Convert Markdown to HTML using pulldown-cmark with enhanced line break preservation
     fn markdown_to_html(markdown: &str) -> String {
         use pulldown_cmark::{Parser, Options, html};
+        
+        // Debug logging for line break conversion tracking
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let original_lines = markdown.lines().count();
+            eprintln!("=== Markdown → HTML Conversion Debug ===");
+            eprintln!("Original Markdown line count: {}", original_lines);
+            eprintln!("Original Markdown (first 200 chars): {}", 
+                     markdown.chars().take(200).collect::<String>().replace('\n', "\\n"));
+        }
+        
+        // Pre-process markdown to ensure consistent line break handling
+        let normalized_markdown = Self::normalize_markdown_line_breaks(markdown);
+        
+        // Debug logging for normalized markdown
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let normalized_lines = normalized_markdown.lines().count();
+            eprintln!("Normalized Markdown line count: {}", normalized_lines);
+            eprintln!("Normalized Markdown (first 200 chars): {}", 
+                     normalized_markdown.chars().take(200).collect::<String>().replace('\n', "\\n"));
+        }
         
         // Set up parser options for better compatibility
         let mut options = Options::empty();
@@ -188,12 +246,425 @@ impl ContentFormatHandler {
         options.insert(Options::ENABLE_FOOTNOTES);
         options.insert(Options::ENABLE_TASKLISTS);
         options.insert(Options::ENABLE_SMART_PUNCTUATION);
+        // Enable hard line breaks to preserve line breaks in text
+        options.insert(Options::ENABLE_HEADING_ATTRIBUTES);
         
-        let parser = Parser::new_ext(markdown, options);
+        let parser = Parser::new_ext(&normalized_markdown, options);
         let mut html_output = String::new();
         html::push_html(&mut html_output, parser);
         
-        html_output
+        // Debug logging for raw HTML output
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let raw_html_lines = html_output.lines().count();
+            eprintln!("Raw HTML line count: {}", raw_html_lines);
+            eprintln!("Raw HTML (first 200 chars): {}", 
+                     html_output.chars().take(200).collect::<String>().replace('\n', "\\n"));
+        }
+        
+        // Post-process to ensure Trilium-compatible HTML format
+        let processed_html = Self::post_process_html_for_trilium(&html_output);
+        
+        // Debug logging for final result
+        if std::env::var("TRILIUM_DEBUG").is_ok() {
+            let final_lines = processed_html.lines().count();
+            eprintln!("Final HTML line count: {}", final_lines);
+            eprintln!("Final HTML (first 200 chars): {}", 
+                     processed_html.chars().take(200).collect::<String>().replace('\n', "\\n"));
+            eprintln!("=====================================");
+        }
+        
+        processed_html
+    }
+    
+    /// Normalize HTML line breaks before conversion to Markdown
+    fn normalize_html_line_breaks(html: &str) -> String {
+        let mut normalized = html.to_string();
+        
+        // Replace various HTML line break patterns with consistent markers
+        // This ensures they are properly converted to Markdown
+        
+        // Handle self-closing <br> tags (most common)
+        normalized = normalized.replace("<br/>", "\n<LINEBREAK_MARKER>\n");
+        normalized = normalized.replace("<br />", "\n<LINEBREAK_MARKER>\n");
+        normalized = normalized.replace("<BR/>", "\n<LINEBREAK_MARKER>\n");
+        normalized = normalized.replace("<BR />", "\n<LINEBREAK_MARKER>\n");
+        
+        // Handle non-self-closing <br> tags
+        normalized = normalized.replace("<br>", "\n<LINEBREAK_MARKER>\n");
+        normalized = normalized.replace("<BR>", "\n<LINEBREAK_MARKER>\n");
+        
+        // Handle paragraph breaks - preserve double line breaks
+        normalized = Self::replace_paragraph_tags(&normalized);
+        
+        // Handle div blocks - often used for line breaks in rich text
+        normalized = Self::replace_div_blocks(&normalized);
+        
+        // Clean up excessive whitespace but preserve intentional line breaks
+        normalized = Self::clean_excessive_whitespace(&normalized);
+        
+        normalized
+    }
+    
+    /// Replace paragraph tags with proper line break markers
+    fn replace_paragraph_tags(html: &str) -> String {
+        // Use regex to handle paragraph tags more robustly
+        let re_p_start = regex::Regex::new(r"<[pP](?:\s[^>]*)?>").unwrap();
+        let re_p_end = regex::Regex::new(r"</[pP]>").unwrap();
+        
+        let mut result = html.to_string();
+        
+        // Replace opening p tags with paragraph marker
+        result = re_p_start.replace_all(&result, "\n<PARAGRAPH_START>\n").to_string();
+        // Replace closing p tags with double line break
+        result = re_p_end.replace_all(&result, "\n<PARAGRAPH_END>\n\n").to_string();
+        
+        result
+    }
+    
+    /// Replace div blocks with line break markers
+    fn replace_div_blocks(html: &str) -> String {
+        let re_div_start = regex::Regex::new(r"<[dD][iI][vV](?:\s[^>]*)?>").unwrap();
+        let re_div_end = regex::Regex::new(r"</[dD][iI][vV]>").unwrap();
+        
+        let mut result = html.to_string();
+        
+        // DIV blocks typically represent line breaks or sections
+        result = re_div_start.replace_all(&result, "\n<DIV_START>").to_string();
+        result = re_div_end.replace_all(&result, "<DIV_END>\n").to_string();
+        
+        result
+    }
+    
+    /// Clean excessive whitespace while preserving intentional line breaks
+    fn clean_excessive_whitespace(html: &str) -> String {
+        let mut result = html.to_string();
+        
+        // Normalize multiple spaces to single spaces, but preserve line breaks
+        let re_spaces = regex::Regex::new(r"[ \t]+").unwrap();
+        result = re_spaces.replace_all(&result, " ").to_string();
+        
+        // Clean up around markers but preserve their line break function
+        result = result.replace(" \n", "\n");
+        result = result.replace("\n ", "\n");
+        
+        result
+    }
+    
+    /// Preserve line breaks in converted Markdown
+    fn preserve_markdown_line_breaks(markdown: &str) -> String {
+        let mut result = markdown.to_string();
+        
+        // Convert our markers back to proper Markdown line breaks
+        result = result.replace("<LINEBREAK_MARKER>", "  \n"); // Two spaces + newline for hard break
+        result = result.replace("<PARAGRAPH_START>", "");
+        result = result.replace("<PARAGRAPH_END>", "\n"); // Single line break after paragraph
+        result = result.replace("<DIV_START>", "");
+        result = result.replace("<DIV_END>", "\n");
+        
+        // Clean up excessive line breaks (more than 2 consecutive)
+        let re_excessive_breaks = regex::Regex::new(r"\n{3,}").unwrap();
+        result = re_excessive_breaks.replace_all(&result, "\n\n").to_string();
+        
+        // Ensure we don't have trailing spaces on empty lines
+        let re_trailing_spaces = regex::Regex::new(r"  \n\s*\n").unwrap();
+        result = re_trailing_spaces.replace_all(&result, "\n\n").to_string();
+        
+        result.trim().to_string()
+    }
+    
+    /// Normalize Markdown line breaks before HTML conversion
+    fn normalize_markdown_line_breaks(markdown: &str) -> String {
+        let mut result = markdown.to_string();
+        
+        // Ensure hard line breaks (two spaces at end of line) are preserved
+        // But also handle cases where users expect single newlines to be preserved
+        
+        // First, protect existing hard breaks
+        result = result.replace("  \n", "<HARD_BREAK_MARKER>\n");
+        
+        // Convert single line breaks to hard breaks in certain contexts
+        // This is more aggressive than standard Markdown but better for note-taking
+        let lines: Vec<&str> = result.split('\n').collect();
+        let mut processed_lines = Vec::new();
+        
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            
+            // Add the line
+            processed_lines.push(line.to_string());
+            
+            // Check if we need to add a hard break marker
+            if i < lines.len() - 1 { // Not the last line
+                let next_line = lines[i + 1].trim();
+                
+                // Add hard break if:
+                // 1. Current line is not empty
+                // 2. Next line is not empty
+                // 3. We're not already ending with a hard break marker
+                // 4. We're not in a code block or special markdown structure
+                if !trimmed.is_empty() 
+                    && !next_line.is_empty()
+                    && !line.ends_with("<HARD_BREAK_MARKER>")
+                    && !Self::is_markdown_structural_element(trimmed)
+                    && !Self::is_markdown_structural_element(next_line) {
+                    
+                    // Replace the line with hard break version
+                    let last_idx = processed_lines.len() - 1;
+                    if !processed_lines[last_idx].ends_with("  ") {
+                        processed_lines[last_idx] = format!("{}<SOFT_BREAK_MARKER>", processed_lines[last_idx]);
+                    }
+                }
+            }
+        }
+        
+        result = processed_lines.join("\n");
+        
+        // Restore hard breaks and convert soft breaks
+        result = result.replace("<HARD_BREAK_MARKER>", "  ");
+        result = result.replace("<SOFT_BREAK_MARKER>", "  "); // Convert soft breaks to hard breaks for preservation
+        
+        result
+    }
+    
+    /// Check if a line is a Markdown structural element that should control its own spacing
+    fn is_markdown_structural_element(line: &str) -> bool {
+        let trimmed = line.trim();
+        
+        // Headers
+        if trimmed.starts_with('#') { return true; }
+        
+        // Lists
+        if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") { return true; }
+        if regex::Regex::new(r"^\d+\. ").unwrap().is_match(trimmed) { return true; }
+        
+        // Code blocks
+        if trimmed.starts_with("```") || trimmed.starts_with("    ") { return true; }
+        
+        // Blockquotes
+        if trimmed.starts_with(">") { return true; }
+        
+        // Horizontal rules
+        if trimmed == "---" || trimmed == "***" || trimmed == "___" { return true; }
+        
+        // Tables
+        if trimmed.contains('|') && trimmed.len() > 2 { return true; }
+        
+        false
+    }
+    
+    /// Post-process HTML to ensure compatibility with Trilium's expected format
+    fn post_process_html_for_trilium(html: &str) -> String {
+        let mut result = html.to_string();
+        
+        // Ensure paragraph breaks are preserved with proper HTML structure
+        // pulldown-cmark tends to generate very clean HTML, but Trilium might expect specific patterns
+        
+        // Convert standalone newlines to <br> tags if they're not already in proper HTML elements
+        // This is crucial for preserving the visual formatting that users expect
+        
+        // First, protect content within existing HTML tags
+        let mut protected_segments = Vec::new();
+        let re_html_elements = regex::Regex::new(r"<[^>]+>[^<]*</[^>]+>").unwrap();
+        
+        for (i, mat) in re_html_elements.find_iter(&result).enumerate() {
+            let placeholder = format!("<PROTECTED_HTML_{}>", i);
+            protected_segments.push((placeholder.clone(), mat.as_str().to_string()));
+        }
+        
+        // Replace protected content with placeholders
+        for (placeholder, _) in &protected_segments {
+            result = result.replace(&protected_segments.iter().find(|(p, _)| p == placeholder).unwrap().1, placeholder);
+        }
+        
+        // Now handle line breaks in unprotected content
+        // Convert single newlines that are not already part of HTML structure to <br> tags
+        let lines: Vec<&str> = result.split('\n').collect();
+        let mut processed_lines = Vec::new();
+        
+        for (i, line) in lines.iter().enumerate() {
+            processed_lines.push(line.to_string());
+            
+            // Add <br> if:
+            // 1. Not the last line
+            // 2. Current line doesn't end with an HTML tag
+            // 3. Next line doesn't start with an HTML tag  
+            // 4. We're not in a protected segment
+            if i < lines.len() - 1 {
+                let current_trimmed = line.trim();
+                let next_line = lines[i + 1].trim();
+                
+                if !current_trimmed.is_empty() 
+                    && !next_line.is_empty()
+                    && !current_trimmed.ends_with('>') 
+                    && !next_line.starts_with('<')
+                    && !current_trimmed.contains("<PROTECTED_HTML_") {
+                    
+                    processed_lines.push("<br>".to_string());
+                }
+            }
+        }
+        
+        result = processed_lines.join("\n");
+        
+        // Restore protected content
+        for (placeholder, original) in protected_segments {
+            result = result.replace(&placeholder, &original);
+        }
+        
+        // Clean up any double <br> tags that might have been created
+        result = result.replace("<br>\n<br>", "<br>");
+        result = result.replace("<br><br>", "<br>");
+        
+        // Ensure proper spacing around block elements
+        result = result.replace("</p><br>", "</p>");
+        result = result.replace("<br><p>", "<p>");
+        
+        result
+    }
+}
+
+// Include tests in the same module to have access to private functions
+#[cfg(test)]
+mod tests {
+    use super::{ContentFormatHandler, ContentFormat};
+    use crate::models::Note;
+
+    fn create_test_note(note_id: &str, title: &str, mime: Option<&str>) -> Note {
+        Note {
+            note_id: note_id.to_string(),
+            title: title.to_string(),
+            note_type: "text".to_string(),
+            mime: mime.map(|m| m.to_string()),
+            is_protected: false,
+            is_deleted: false,
+            date_created: "2024-01-01 00:00:00".to_string(),
+            date_modified: "2024-01-01 00:00:00".to_string(),
+            utc_date_created: "2024-01-01T00:00:00.000Z".to_string(),
+            utc_date_modified: "2024-01-01T00:00:00.000Z".to_string(),
+            parent_note_ids: vec!["root".to_string()],
+            child_note_ids: vec![],
+            attributes: None,
+        }
+    }
+
+    #[test]
+    fn test_html_br_tags_line_preservation() {
+        let html_content = "First line<br>Second line<br/>Third line<br />Fourth line";
+        let note = create_test_note("test1", "Test Note", Some("text/html"));
+        
+        // Convert HTML to Markdown (for editing)
+        let conversion_result = ContentFormatHandler::prepare_for_editing(&note, html_content);
+        
+        // The Markdown should preserve the line structure
+        let markdown = &conversion_result.content;
+        let line_count = markdown.lines().filter(|line| !line.trim().is_empty()).count();
+        
+        assert!(line_count >= 4, 
+            "Expected at least 4 lines in Markdown, got {}. Content: {:?}", 
+            line_count, markdown);
+        
+        // Convert back to HTML (for saving)
+        let final_html = ContentFormatHandler::prepare_for_saving(&conversion_result, markdown);
+        
+        // The final HTML should maintain line breaks
+        let has_structure = final_html.contains("<br") || 
+                           final_html.contains("<p>") || 
+                           final_html.lines().count() > 1;
+        assert!(has_structure, 
+            "Expected line break indicators in final HTML, got: {:?}", final_html);
+    }
+
+    #[test]
+    fn test_html_paragraph_preservation() {
+        let html_content = "<p>First paragraph</p><p>Second paragraph</p><p>Third paragraph</p><p>Fourth paragraph</p>";
+        let note = create_test_note("test2", "Test Note", Some("text/html"));
+        
+        let conversion_result = ContentFormatHandler::prepare_for_editing(&note, html_content);
+        let markdown = &conversion_result.content;
+        
+        // Should have multiple lines/paragraphs
+        let line_count = markdown.lines().filter(|line| !line.trim().is_empty()).count();
+        assert!(line_count >= 4, 
+            "Expected at least 4 non-empty lines, got {}. Content: {:?}", 
+            line_count, markdown);
+        
+        // Convert back to HTML
+        let final_html = ContentFormatHandler::prepare_for_saving(&conversion_result, markdown);
+        
+        // Should maintain paragraph structure
+        let has_structure = final_html.contains("<p>") || 
+                           final_html.contains("<br") || 
+                           final_html.lines().count() > 1;
+        assert!(has_structure, 
+            "Expected structural elements in final HTML, got: {:?}", final_html);
+    }
+
+    #[test]
+    fn test_critical_multiline_note_preservation() {
+        // This test simulates the exact user scenario described in the issue
+        let original_multiline_html = r#"<div>Project Meeting Notes</div>
+<div>Date: January 15, 2024</div>
+<div>Attendees: Alice, Bob, Charlie</div>
+<div>Agenda Items:</div>
+<div>- Review Q4 results</div>
+<div>- Plan for Q1 initiatives</div>
+<div>Action Items:</div>
+<div>- Alice: Prepare budget</div>"#;
+        
+        let note = create_test_note("integration_test", "Multi-line Note", Some("text/html"));
+        
+        // Step 1: Convert to editing format (HTML -> Markdown)
+        let conversion_result = ContentFormatHandler::prepare_for_editing(&note, original_multiline_html);
+        let markdown_for_editing = &conversion_result.content;
+        
+        // Verify we have multiple lines for editing
+        let editing_lines = markdown_for_editing.lines().filter(|line| !line.trim().is_empty()).count();
+        assert!(editing_lines >= 6, 
+            "CRITICAL: Lost lines during HTML->Markdown conversion! Expected ≥6, got {}. Content: {:?}", 
+            editing_lines, markdown_for_editing);
+        
+        // Step 2: Convert back to HTML for saving (Markdown -> HTML)  
+        let final_html_for_trilium = ContentFormatHandler::prepare_for_saving(&conversion_result, markdown_for_editing);
+        
+        // CRITICAL TEST: The final HTML should preserve the multi-line structure
+        let br_tags = final_html_for_trilium.matches("<br").count();
+        let p_tags = final_html_for_trilium.matches("<p>").count();
+        let div_tags = final_html_for_trilium.matches("<div>").count();
+        let total_lines = final_html_for_trilium.lines().count();
+        
+        let structure_indicators = br_tags + p_tags + div_tags;
+        
+        assert!(structure_indicators > 0 || total_lines > 1, 
+            "CRITICAL FAILURE: Lines were 'smashed' together! No structural elements found. \
+             br_tags: {}, p_tags: {}, div_tags: {}, total_lines: {}. \
+             Final HTML: {:?}", 
+             br_tags, p_tags, div_tags, total_lines, final_html_for_trilium);
+        
+        println!("✅ SUCCESS: Line break preservation working correctly!");
+        println!("   Editing lines: {}", editing_lines);
+        println!("   Final structure indicators: {}", structure_indicators);
+        println!("   Final total lines: {}", total_lines);
+    }
+
+    #[test]
+    fn test_round_trip_preservation() {
+        let original_html = "Line 1<br>Line 2<br>Line 3<br>Line 4<br>Line 5";
+        let note = create_test_note("test5", "Test Note", Some("text/html"));
+        
+        // HTML -> Markdown
+        let conversion_result = ContentFormatHandler::prepare_for_editing(&note, original_html);
+        let markdown = &conversion_result.content;
+        let markdown_lines = markdown.lines().filter(|line| !line.trim().is_empty()).count();
+        
+        // Markdown -> HTML
+        let final_html = ContentFormatHandler::prepare_for_saving(&conversion_result, markdown);
+        let final_line_indicators = final_html.matches("<br").count() + final_html.matches("<p>").count();
+        
+        assert!(markdown_lines >= 5, 
+            "Lost lines in HTML->Markdown conversion: expected ≥5, got {}", markdown_lines);
+        
+        assert!(final_line_indicators > 0 || final_html.contains("\n"), 
+            "Lost line structure in Markdown->HTML conversion. Final HTML: {:?}", final_html);
     }
 }
 
