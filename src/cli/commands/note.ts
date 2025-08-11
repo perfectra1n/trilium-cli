@@ -1,0 +1,445 @@
+import type { Command } from 'commander';
+import chalk from 'chalk';
+import { createReadStream, existsSync, writeFileSync } from 'fs';
+import { resolve, extname, basename } from 'path';
+
+import type {
+  NoteCreateOptions,
+  NoteGetOptions,
+  NoteUpdateOptions,
+  NoteDeleteOptions,
+  NoteListOptions,
+  NoteExportOptions,
+  NoteImportOptions,
+  NoteMoveOptions,
+  NoteCloneOptions,
+} from '../types.js';
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { createLogger } from '../../utils/logger.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+
+/**
+ * Set up note management commands
+ */
+export function setupNoteCommands(program: Command): void {
+  const noteCommand = program
+    .command('note')
+    .description('Note operations');
+
+  // Create note
+  noteCommand
+    .command('create')
+    .description('Create a new note')
+    .argument('<title>', 'note title')
+    .option('-c, --content <content>', 'note content')
+    .option('-t, --note-type <type>', 'note type (text, code, etc.)', 'text')
+    .option('-p, --parent <id>', 'parent note ID')
+    .option('-e, --edit', 'open in editor')
+    .action(async (title: string, options: NoteCreateOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        let content = options.content || '';
+        
+        // Open editor if requested or no content provided
+        if (options.edit || (!content && !process.stdin.isTTY)) {
+          const { openEditor } = await import('../../utils/editor.js');
+          content = await openEditor(content);
+        }
+        
+        const noteData = {
+          title,
+          content,
+          type: options.noteType || 'text',
+          parentNoteId: options.parent
+        };
+        
+        const note = await client.createNote(noteData);
+        
+        const output = formatOutput([note], options.output, [
+          'noteId', 'title', 'type', 'parentNoteId', 'dateCreated'
+        ]);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green(`Note created successfully: ${note.noteId}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Get note
+  noteCommand
+    .command('get')
+    .description('Get note by ID')
+    .argument('<note-id>', 'note ID')
+    .option('-c, --content', 'include content')
+    .action(async (noteId: string, options: NoteGetOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        const note = await client.getNote(noteId, options.content);
+        
+        const columns = [
+          'noteId', 'title', 'type', 'mime', 'isProtected', 
+          'dateCreated', 'dateModified'
+        ];
+        
+        if (options.content && note.content) {
+          columns.push('contentLength');
+          note.contentLength = `${note.content.length} chars`;
+          
+          // Show content preview for table output
+          if (options.output === 'table' && note.content.length > 200) {
+            note.contentPreview = note.content.substring(0, 200) + '...';
+            columns.push('contentPreview');
+          } else if (options.output === 'table') {
+            columns.push('content');
+          }
+        }
+        
+        const output = formatOutput([note], options.output, columns);
+        console.log(output);
+        
+        // Show full content for JSON output or if specifically requested
+        if (options.content && note.content && options.output === 'json') {
+          console.log(JSON.stringify({ ...note, content: note.content }, null, 2));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Update note
+  noteCommand
+    .command('update')
+    .description('Update existing note')
+    .argument('<note-id>', 'note ID')
+    .option('-t, --title <title>', 'new title')
+    .option('-c, --content <content>', 'new content')
+    .option('-e, --edit', 'open in editor')
+    .action(async (noteId: string, options: NoteUpdateOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        const updates: any = {};
+        
+        if (options.title) updates.title = options.title;
+        
+        if (options.content) {
+          updates.content = options.content;
+        } else if (options.edit) {
+          // Get current content for editing
+          const currentNote = await client.getNote(noteId, true);
+          const { openEditor } = await import('../../utils/editor.js');
+          updates.content = await openEditor(currentNote.content || '');
+        }
+        
+        if (Object.keys(updates).length === 0) {
+          throw new TriliumError('No updates specified. Use --title, --content, or --edit options.');
+        }
+        
+        const note = await client.updateNote(noteId, updates);
+        
+        const output = formatOutput([note], options.output, [
+          'noteId', 'title', 'type', 'dateModified'
+        ]);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green('Note updated successfully'));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Delete note
+  noteCommand
+    .command('delete')
+    .alias('rm')
+    .description('Delete a note')
+    .argument('<note-id>', 'note ID')
+    .option('-f, --force', 'force delete without confirmation')
+    .action(async (noteId: string, options: NoteDeleteOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        if (!options.force) {
+          const readline = await import('readline');
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+          });
+
+          const answer = await new Promise<string>((resolve) => {
+            rl.question(
+              chalk.yellow(`Are you sure you want to delete note ${noteId}? This action cannot be undone. (y/N): `),
+              resolve
+            );
+          });
+          rl.close();
+
+          if (answer.toLowerCase() !== 'y' && answer.toLowerCase() !== 'yes') {
+            logger.info('Delete cancelled.');
+            return;
+          }
+        }
+
+        const client = await createTriliumClient(options);
+        await client.deleteNote(noteId);
+        
+        if (options.output === 'json') {
+          console.log(JSON.stringify({ success: true, noteId }, null, 2));
+        } else {
+          logger.info(chalk.green(`Note ${noteId} deleted successfully`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // List notes
+  noteCommand
+    .command('list')
+    .alias('ls')
+    .description('List child notes')
+    .argument('[parent-id]', 'parent note ID (defaults to root)', 'root')
+    .option('-t, --tree', 'show as tree')
+    .option('-d, --depth <number>', 'maximum depth for tree view', (val) => parseInt(val, 10), 3)
+    .action(async (parentId: string, options: NoteListOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        if (options.tree) {
+          const tree = await client.getNoteTree(parentId, options.depth);
+          
+          if (options.output === 'json') {
+            console.log(JSON.stringify(tree, null, 2));
+          } else {
+            displayTreeStructure(tree, 0, options.depth || 3);
+          }
+        } else {
+          const notes = await client.getChildNotes(parentId);
+          
+          const output = formatOutput(notes, options.output, [
+            'noteId', 'title', 'type', 'isProtected', 'dateModified'
+          ]);
+          console.log(output);
+        }
+        
+        if (options.output === 'table') {
+          const count = options.tree ? 'tree structure' : `${Array.isArray(notes) ? notes.length : 'N/A'} note(s)`;
+          logger.info(chalk.green(`Displayed ${count} for parent ${parentId}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Export note
+  noteCommand
+    .command('export')
+    .description('Export note')
+    .argument('<note-id>', 'note ID')
+    .option('-f, --format <format>', 'export format (html, markdown, pdf)', 'html')
+    .option('-o, --output <file>', 'output file')
+    .action(async (noteId: string, options: NoteExportOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        logger.info(`Exporting note ${noteId} as ${options.format}...`);
+        
+        const exportResult = await client.exportNote(noteId, options.format);
+        
+        // Determine output path
+        let outputPath = options.output;
+        if (!outputPath) {
+          const note = await client.getNote(noteId);
+          const extension = options.format === 'pdf' ? 'pdf' : 
+                           options.format === 'markdown' ? 'md' : 'html';
+          outputPath = `${note.title.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
+        }
+        
+        // Write to file
+        if (typeof exportResult.content === 'string') {
+          writeFileSync(outputPath, exportResult.content);
+        } else {
+          // Handle binary content (like PDF)
+          writeFileSync(outputPath, exportResult.content);
+        }
+        
+        const output = formatOutput([{
+          noteId,
+          format: options.format,
+          outputFile: outputPath,
+          size: `${exportResult.size || 0} bytes`
+        }], options.output, ['noteId', 'format', 'outputFile', 'size']);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green(`Note exported to ${outputPath}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Import note
+  noteCommand
+    .command('import')
+    .description('Import note from file')
+    .argument('<file>', 'file to import')
+    .option('-p, --parent <id>', 'parent note ID')
+    .option('-f, --format <format>', 'import format (auto, html, markdown)', 'auto')
+    .action(async (filePath: string, options: NoteImportOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const resolvedPath = resolve(filePath);
+        
+        if (!existsSync(resolvedPath)) {
+          throw new TriliumError(`File not found: ${resolvedPath}`);
+        }
+        
+        const client = await createTriliumClient(options);
+        
+        // Auto-detect format if not specified
+        let format = options.format;
+        if (format === 'auto') {
+          const ext = extname(resolvedPath).toLowerCase();
+          if (ext === '.md') format = 'markdown';
+          else if (ext === '.html' || ext === '.htm') format = 'html';
+          else format = 'text';
+        }
+        
+        logger.info(`Importing ${filePath} as ${format}...`);
+        
+        const { readFileSync } = await import('fs');
+        const content = readFileSync(resolvedPath, 'utf8');
+        const title = basename(resolvedPath, extname(resolvedPath));
+        
+        const note = await client.createNote({
+          title,
+          content,
+          type: format === 'markdown' ? 'text' : format,
+          parentNoteId: options.parent
+        });
+        
+        const output = formatOutput([{
+          ownerId: note.noteId,
+          title: note.title,
+          importedFrom: filePath,
+          format,
+          size: `${content.length} chars`
+        }], options.output, ['noteId', 'title', 'importedFrom', 'format', 'size']);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green(`File imported as note: ${note.noteId}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Move note
+  noteCommand
+    .command('move')
+    .alias('mv')
+    .description('Move note to another parent')
+    .argument('<note-id>', 'note ID')
+    .argument('<parent-id>', 'new parent note ID')
+    .action(async (noteId: string, parentId: string, options: NoteMoveOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        const result = await client.moveNote(noteId, parentId);
+        
+        const output = formatOutput([{
+          noteId,
+          oldParent: result.oldParentId,
+          newParent: parentId,
+          moved: true
+        }], options.output, ['noteId', 'oldParent', 'newParent', 'moved']);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green(`Note ${noteId} moved to parent ${parentId}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+
+  // Clone note
+  noteCommand
+    .command('clone')
+    .description('Clone note')
+    .argument('<note-id>', 'note ID to clone')
+    .option('-t, --clone-type <type>', 'clone type (deep, shallow)', 'deep')
+    .action(async (noteId: string, options: NoteCloneOptions) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        
+        const result = await client.cloneNote(noteId, options.cloneType === 'deep');
+        
+        const output = formatOutput([{
+          originalNoteId: noteId,
+          clonedNoteId: result.noteId,
+          cloneType: options.cloneType,
+          success: true
+        }], options.output, ['originalNoteId', 'clonedNoteId', 'cloneType', 'success']);
+        console.log(output);
+        
+        if (options.output === 'table') {
+          logger.info(chalk.green(`Note cloned successfully: ${result.noteId}`));
+        }
+        
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+}
+
+/**
+ * Display tree structure in console
+ */
+function displayTreeStructure(tree: any, depth: number = 0, maxDepth: number = 3): void {
+  const indent = '  '.repeat(depth);
+  const icon = tree.type === 'search' ? '🔍' : 
+               tree.isProtected ? '🔒' : 
+               tree.type === 'code' ? '💻' : '📄';
+  
+  console.log(`${indent}${icon} ${tree.title} (${tree.noteId})`);
+  
+  if (tree.children && depth < maxDepth) {
+    tree.children.forEach((child: any) => {
+      displayTreeStructure(child, depth + 1, maxDepth);
+    });
+  }
+}
