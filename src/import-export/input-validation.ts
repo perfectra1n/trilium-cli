@@ -1,6 +1,7 @@
 import { z } from 'zod';
-import { ImportExportError } from './types.js';
+
 import { validateSecurePath } from './secure-path.js';
+import { ImportExportError } from './types.js';
 
 /**
  * Input validation utilities for import/export operations
@@ -13,6 +14,7 @@ export const SafeStringSchema = z.string()
   .min(1, 'String cannot be empty')
   .max(1000, 'String too long (max 1000 characters)')
   .refine(
+    // eslint-disable-next-line no-control-regex
     (val) => !(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(val)),
     'String contains invalid control characters'
   )
@@ -32,6 +34,7 @@ export const SafePathSchema = z.string()
     'Path contains directory traversal sequence'
   )
   .refine(
+    // eslint-disable-next-line no-control-regex
     (val) => !(/[\x00-\x1f]/.test(val)),
     'Path contains control characters'
   )
@@ -79,6 +82,7 @@ export const EmailSchema = z.string()
   .email('Invalid email format')
   .max(320, 'Email too long (max 320 characters)')
   .refine(
+    // eslint-disable-next-line no-control-regex
     (val) => !(/[\x00-\x1f\x7f-\x9f]/.test(val)),
     'Email contains control characters'
   );
@@ -110,6 +114,7 @@ export const CommitMessageSchema = z.string()
   .min(1, 'Commit message cannot be empty')
   .max(2048, 'Commit message too long (max 2048 characters)')
   .refine(
+    // eslint-disable-next-line no-control-regex
     (val) => !(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(val)),
     'Commit message contains invalid control characters'
   )

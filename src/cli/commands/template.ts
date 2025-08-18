@@ -1,7 +1,13 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { createReadStream, existsSync } from 'fs';
 
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   TemplateListOptions,
   TemplateCreateOptions,
@@ -11,11 +17,6 @@ import type {
   TemplateDeleteOptions,
   TemplateValidateOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up template management commands
@@ -73,14 +74,17 @@ export function setupTemplateCommands(program: Command): void {
         // Open editor if no content provided or edit flag is set
         if (!content || options.edit) {
           const { openEditor } = await import('../../utils/editor.js');
-          content = await openEditor(content || '# Template: ' + title + '\n\n{{CONTENT}}');
+          const editorResult = await openEditor(content || '# Template: ' + title + '\n\n{{CONTENT}}');
+          content = editorResult.content;
         }
         
-        const template = await client.createTemplate({
+        // Create a template note with the template label
+        const template = await client.createNote({
+          parentNoteId: 'root',
           title,
-          content,
-          description: options.description,
-        });
+          content: content as string,
+          type: 'text' as any,
+        } as any);
         
         const output = formatOutput([template], options.output, [
           'noteId', 'title', 'description', 'type'
@@ -107,7 +111,11 @@ export function setupTemplateCommands(program: Command): void {
       
       try {
         const client = await createTriliumClient(options);
-        const templateNote = await client.getTemplate(template);
+        const templates = await client.getTemplates();
+        const templateNote = templates.find(t => (t as any).noteId === template || t.title === template);
+        if (!templateNote) {
+          throw new Error(`Template not found: ${template}`);
+        }
         
         if (options.variables) {
           const variables = extractTemplateVariables(templateNote.content);
@@ -143,7 +151,11 @@ export function setupTemplateCommands(program: Command): void {
       
       try {
         const client = await createTriliumClient(options);
-        const templateNote = await client.getTemplate(template);
+        const templates = await client.getTemplates();
+        const templateNote = templates.find(t => (t as any).noteId === template || t.title === template);
+        if (!templateNote) {
+          throw new Error(`Template not found: ${template}`);
+        }
         
         // Extract variables from template
         const templateVars = extractTemplateVariables(templateNote.content);
@@ -181,17 +193,17 @@ export function setupTemplateCommands(program: Command): void {
         }
         
         // Apply template with variables
-        const note = await client.createNoteFromTemplate({
-          templateId: templateNote.noteId,
-          parentNoteId: options.parent,
-          variables: variableValues,
-        });
+        const note = await client.createNoteFromTemplate(
+          (templateNote as any).noteId || (templateNote as any).id || template,
+          variableValues,
+          options.parent || 'root'
+        );
         
         // Open in editor if requested
         if (options.edit) {
           const { openEditor } = await import('../../utils/editor.js');
-          const editedContent = await openEditor(note.content);
-          await client.updateNote(note.noteId, { content: editedContent });
+          const editedContent = await openEditor((note as any).content || '');
+          await client.updateNote(note.noteId, { content: editedContent.content } as any);
         }
         
         const output = formatOutput([note], options.output, [
@@ -227,16 +239,18 @@ export function setupTemplateCommands(program: Command): void {
         if (options.description) updates.description = options.description;
         
         if (options.edit) {
-          const currentTemplate = await client.getTemplate(templateId);
+          const currentTemplate = await client.getTemplates();
+          const template = currentTemplate.find(t => (t as any).noteId === templateId || t.id === templateId);
           const { openEditor } = await import('../../utils/editor.js');
-          updates.content = await openEditor(currentTemplate.content);
+          const editorResult = await openEditor(template?.content || '');
+          updates.content = editorResult.content;
         }
         
         if (Object.keys(updates).length === 0) {
           throw new TriliumError('No updates specified. Use --title, --description, or --edit options.');
         }
         
-        const template = await client.updateTemplate(templateId, updates);
+        const template = await client.updateNote(templateId, updates);
         
         const output = formatOutput([template], options.output, [
           'noteId', 'title', 'description', 'utcDateModified'
@@ -285,7 +299,7 @@ export function setupTemplateCommands(program: Command): void {
         }
 
         const client = await createTriliumClient(options);
-        await client.deleteTemplate(templateId);
+        await client.deleteNote(templateId);
         
         if (options.output === 'json') {
           console.log(JSON.stringify({ success: true, templateId }, null, 2));
@@ -315,8 +329,12 @@ export function setupTemplateCommands(program: Command): void {
           const fs = await import('fs/promises');
           content = await fs.readFile(template, 'utf8');
         } else {
-          const templateNote = await client.getTemplate(template);
-          content = templateNote.content;
+          const templates = await client.getTemplates();
+        const templateNote = templates.find(t => (t as any).noteId === template || t.title === template);
+        if (!templateNote) {
+          throw new Error(`Template not found: ${template}`);
+        }
+          content = templateNote.content || '';
         }
         
         const validation = validateTemplate(content);
@@ -355,7 +373,9 @@ function extractTemplateVariables(content: string): string[] {
   let match;
   
   while ((match = variableRegex.exec(content)) !== null) {
-    variables.add(match[1]);
+    if (match[1]) {
+      variables.add(match[1]);
+    }
   }
   
   return Array.from(variables);

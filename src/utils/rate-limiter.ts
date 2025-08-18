@@ -316,7 +316,8 @@ export class RequestQueue {
       // Insert based on priority (higher priority first)
       let inserted = false;
       for (let i = 0; i < this.queue.length; i++) {
-        if (this.queue[i].metadata.priority < metadata.priority) {
+        const queueItem = this.queue[i];
+        if (queueItem && queueItem.metadata.priority < metadata.priority) {
           this.queue.splice(i, 0, item);
           inserted = true;
           break;

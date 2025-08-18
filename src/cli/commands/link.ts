@@ -1,6 +1,11 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
+import type { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   LinkBacklinksOptions,
   LinkOutgoingOptions,
@@ -8,11 +13,6 @@ import type {
   LinkUpdateOptions,
   LinkValidateOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up link management commands
@@ -39,7 +39,7 @@ export function setupLinkCommands(program: Command): void {
           // Get context for each backlink
           const backlinkContexts = await Promise.all(
             backlinks.map(async (link) => {
-              const context = await client.getLinkContext(link.noteId, noteId);
+              const context = await client.getLinkContext(link.fromNoteId, noteId);
               return { ...link, context };
             })
           );
@@ -103,7 +103,7 @@ export function setupLinkCommands(program: Command): void {
         const client = await createTriliumClient(options);
         
         logger.info('Scanning for broken links...');
-        const brokenLinks = await client.findBrokenLinks(noteId);
+        const brokenLinks = await client.findBrokenLinks(ownerId || 'root');
         
         if (brokenLinks.length === 0) {
           if (options.output === 'json') {
@@ -172,8 +172,8 @@ export function setupLinkCommands(program: Command): void {
         ]);
         console.log(output);
         
-        const successful = results.filter(r => r.updated).length;
-        const failed = results.length - successful;
+        const successful = results && Array.isArray(results) ? results.filter((r: any) => r.updated).length : 0;
+        const failed = results && Array.isArray(results) ? results.length - successful : 0;
         
         if (options.output === 'table') {
           logger.info(chalk.green(`Successfully updated ${successful} link(s)`));

@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Text, useApp } from 'ink';
 import * as fuzzy from 'fuzzy';
+import { Box, Text, useApp } from 'ink';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 
+import { TriliumClient } from '../../api/client.js';
 import type { Config } from '../../config/index.js';
 import type { GlobalOptions } from '../../types/cli.js';
-import { TriliumClient } from '../../api/client.js';
 import { useAppState, useKeyboard, useApi } from '../hooks/index.js';
 import type { KeyboardHandlers } from '../hooks/index.js';
 import { 
@@ -18,12 +18,12 @@ import {
   type BookmarkedNote,
 } from '../types/index.js';
 
-import { TreeView } from './TreeView.js';
 import { ContentView } from './ContentView.js';
-import { SearchView } from './SearchView.js';
-import { StatusBar } from './StatusBar.js';
 import { InputModal } from './InputModal.js';
+import { SearchView } from './SearchView.js';
 import { SplitView } from './SplitView.js';
+import { StatusBar } from './StatusBar.js';
+import { TreeView } from './TreeView.js';
 
 interface AppProps {
   config: Config;
@@ -125,12 +125,12 @@ export function App({ config, options }: AppProps): JSX.Element {
     if (!selectedItem) return;
     
     try {
-      let ownerId: string;
+      let noteId: string;
       
       if ('noteId' in selectedItem) {
-        noteId = selectedItem.note.noteId;
+        noteId = selectedItem.noteId;
       } else if ('note' in selectedItem) {
-        noteId = selectedItem.note.note.noteId;
+        noteId = selectedItem.note.noteId;
       } else {
         return;
       }
@@ -145,7 +145,7 @@ export function App({ config, options }: AppProps): JSX.Element {
       
       // Add to recent notes
       addRecentNote({
-        noteId,
+        ownerId: note.noteId,
         title: note.title,
         accessedAt: new Date(),
       });
@@ -184,12 +184,12 @@ export function App({ config, options }: AppProps): JSX.Element {
     const results: FuzzySearchResult[] = [];
     
     for (const item of allItems) {
-      const match = fuzzy.filter(query, [item.note.title]);
+      const match = fuzzy.filter(query, [item.note?.title || '']);
       if (match.length > 0) {
         results.push({
           item,
-          score: match[0].score || 0,
-          indices: match[0].original ? [] : [], // Simplified for now
+          score: match[0]?.score || 0,
+          indices: match[0]?.original ? [] : [], // Simplified for now
         });
       }
     }
@@ -240,13 +240,13 @@ export function App({ config, options }: AppProps): JSX.Element {
       const modes = [ViewMode.Tree, ViewMode.Content, ViewMode.Attributes, ViewMode.Search];
       const currentIndex = modes.indexOf(state.viewMode);
       const nextIndex = (currentIndex + 1) % modes.length;
-      setViewMode(modes[nextIndex]);
+      setViewMode(modes[nextIndex]!);
     },
     onSwitchViewReverse: () => {
       const modes = [ViewMode.Tree, ViewMode.Content, ViewMode.Attributes, ViewMode.Search];
       const currentIndex = modes.indexOf(state.viewMode);
       const prevIndex = (currentIndex - 1 + modes.length) % modes.length;
-      setViewMode(modes[prevIndex]);
+      setViewMode(modes[prevIndex]!);
     },
     onToggleSplitView: () => {
       setViewMode(state.viewMode === ViewMode.Split ? ViewMode.Tree : ViewMode.Split);
@@ -295,7 +295,7 @@ export function App({ config, options }: AppProps): JSX.Element {
     onToggleBookmark: () => {
       if (!state.currentNote) return;
       
-      const isBookmarked = state.bookmarkedNotes.some(b => b.noteId === state.currentNote!.noteId);
+      const isBookmarked = state.bookmarkedNotes.some(b => b.ownerId === state.currentNote!.noteId);
       
       if (isBookmarked) {
         removeBookmark(state.currentNote.noteId);
@@ -470,7 +470,7 @@ export function App({ config, options }: AppProps): JSX.Element {
             selectedIndex={state.selectedIndex}
             currentNote={state.currentNote}
             currentContent={state.currentContent}
-            contentScroll={state.noteContentScroll}
+            contentScroll={state.contentScroll}
             splitRatio={state.splitRatio}
             focusedPane={state.splitPaneFocused}
           />
@@ -497,7 +497,7 @@ export function App({ config, options }: AppProps): JSX.Element {
                 <ContentView
                   note={state.currentNote}
                   content={state.currentContent}
-                  contentScroll={state.noteContentScroll}
+                  contentScroll={state.contentScroll}
                   viewMode={state.viewMode}
                   recentNotes={state.recentNotes}
                   bookmarkedNotes={state.bookmarkedNotes}
@@ -617,14 +617,8 @@ function looksLikeMarkdown(content: string): boolean {
 function HelpModal() {
   return (
     <Box 
-      position="absolute" 
-      top={2} 
-      left={2} 
-      right={2} 
-      bottom={2} 
       borderStyle="single" 
       borderColor="yellow"
-      backgroundColor="black"
       padding={1}
     >
       <Text>Help modal - TODO: Implement full help system</Text>
@@ -635,14 +629,8 @@ function HelpModal() {
 function LogViewerModal({ logEntries }: { logEntries: any[], selectedIndex: number, scrollOffset: number }) {
   return (
     <Box 
-      position="absolute" 
-      top={2} 
-      left={2} 
-      right={2} 
-      bottom={2} 
       borderStyle="single" 
       borderColor="yellow"
-      backgroundColor="black"
       padding={1}
     >
       <Text>Log Viewer - {logEntries.length} entries</Text>

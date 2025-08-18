@@ -7,15 +7,12 @@
  */
 export interface Profile {
   name: string;
-  baseUrl: string;
-  apiToken?: string;
-  default?: boolean;
-  timeout?: number;
-  retries?: number;
-  rateLimit?: {
-    maxRequests: number;
-    windowMs: number;
-  };
+  serverUrl: string;
+  apiToken: string;
+  description?: string;
+  created?: string;
+  lastUsed?: string;
+  isDefault?: boolean;
 }
 
 /**

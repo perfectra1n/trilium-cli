@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
+import React, { useState, useEffect } from 'react';
 
+import { TriliumClient } from '../../api/client.js';
 import type { Config } from '../../config/index.js';
 import type { GlobalOptions } from '../../types/cli.js';
-import { TriliumClient } from '../../api/client.js';
 
 interface AppProps {
   config: Config;

@@ -3,8 +3,8 @@
  * This script verifies that core components can be imported and instantiated
  */
 
-import { Config } from './config/index.js';
 import { TriliumClient } from './api/client.js';
+import { Config } from './config/index.js';
 import { formatOutput, createCliConfig } from './utils/cli.js';
 import { createLogger } from './utils/logger.js';
 

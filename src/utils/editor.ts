@@ -4,7 +4,9 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { TriliumError } from '../error.js';
+
 import { createLogger } from './logger.js';
+import { isValidArray, getFirstElement, getElementAt, hasContent } from './type-guards.js';
 
 /**
  * Editor configuration options
@@ -197,7 +199,7 @@ async function createTempFile(content: string, extension: string = 'txt'): Promi
 function spawnEditor(editor: string, filePath: string, wait: boolean = true): Promise<boolean> {
   return new Promise((resolve) => {
     const parts = editor.split(' ');
-    const command = parts[0]!;
+    const command = getFirstElement(parts, 'Editor command is empty');
     const args = [...parts.slice(1), filePath];
     
     const child = spawn(command, args, {
@@ -289,14 +291,18 @@ export function validateContent(content: string, format: string): { valid: boole
       }
       break;
       
-    case 'html':
+    case 'html': {
       // Basic HTML validation - check for balanced tags
       const tagMatches = content.match(/<\/?[a-zA-Z][^>]*>/g) || [];
       const openTags: string[] = [];
       
       for (const tag of tagMatches) {
         if (tag.startsWith('</')) {
-          const tagName = tag.slice(2, -1).split(' ')[0]!;
+          const tagParts = tag.slice(2, -1).split(' ');
+          if (!isValidArray(tagParts)) {
+            continue;
+          }
+          const tagName = getFirstElement(tagParts, 'Tag name is empty');
           const lastOpen = openTags[openTags.length - 1];
           if (lastOpen === tagName) {
             openTags.pop();
@@ -304,7 +310,11 @@ export function validateContent(content: string, format: string): { valid: boole
             errors.push(`Unmatched closing tag: ${tag}`);
           }
         } else if (!tag.endsWith('/>')) {
-          const tagName = tag.slice(1, -1).split(' ')[0]!;
+          const tagParts = tag.slice(1, -1).split(' ');
+          if (!isValidArray(tagParts)) {
+            continue;
+          }
+          const tagName = getFirstElement(tagParts, 'Tag name is empty');
           openTags.push(tagName);
         }
       }
@@ -313,6 +323,7 @@ export function validateContent(content: string, format: string): { valid: boole
         errors.push(`Unclosed tags: ${openTags.join(', ')}`);
       }
       break;
+    }
       
     default:
       // No specific validation for other formats
@@ -335,19 +346,30 @@ export function extractTitle(content: string, format: string = 'markdown'): stri
   
   switch (format.toLowerCase()) {
     case 'markdown':
-    case 'md':
+    case 'md': {
       // Look for first heading
       const mdMatch = content.match(/^#+\s+(.+)$/m);
-      return mdMatch ? mdMatch[1]!.trim() : null;
+      if (mdMatch && isValidArray(mdMatch, 2)) {
+        const title = getElementAt(mdMatch, 1, 'Markdown title not found');
+        return title.trim();
+      }
+      return null;
+    }
       
-    case 'html':
+    case 'html': {
       // Look for h1-h6 tags
       const htmlMatch = content.match(/<h[1-6][^>]*>([^<]+)<\/h[1-6]>/i);
-      return htmlMatch ? htmlMatch[1]!.trim() : null;
+      if (htmlMatch && isValidArray(htmlMatch, 2)) {
+        const title = getElementAt(htmlMatch, 1, 'HTML title not found');
+        return title.trim();
+      }
+      return null;
+    }
       
-    default:
+    default: {
       // Use first non-empty line
       const firstLine = content.split('\n').find(line => line.trim());
       return firstLine ? firstLine.trim() : null;
+    }
   }
 }

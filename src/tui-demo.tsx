@@ -5,8 +5,8 @@
  * This demonstrates the TUI functionality without dependencies on the full CLI
  */
 
-import React from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
+import React from 'react';
 import { useState, useEffect } from 'react';
 
 // Simple demo data
@@ -147,7 +147,7 @@ function TriliumTUI(): JSX.Element {
                     <Text bold>Title: {currentNote.title}</Text>
                     <Text dimColor>ID: {currentNote.id} | Type: {currentNote.type}</Text>
                     <Text>{"─".repeat(40)}</Text>
-                    <Text>{currentNote.noteContent}</Text>
+                    <Text>{currentNote.content}</Text>
                   </>
                 )}
               </Box>
@@ -174,13 +174,8 @@ function TriliumTUI(): JSX.Element {
       {/* Search Input */}
       {state.inputMode === 'search' && (
         <Box 
-          position="absolute" 
-          top={3} 
-          left={2} 
-          right={2}
           borderStyle="single" 
           borderColor="yellow" 
-          backgroundColor="black"
           paddingX={1}
         >
           <Text color="yellow">Search: {state.searchQuery}</Text>

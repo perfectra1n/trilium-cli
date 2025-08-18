@@ -1,9 +1,11 @@
-import React from 'react';
-import { render } from 'ink';
 import process from 'node:process';
+
+import { render } from 'ink';
+import React from 'react';
 
 import type { Config } from '../config/index.js';
 import type { GlobalOptions } from '../types/cli.js';
+
 import { App } from './components/App.js';
 
 /**

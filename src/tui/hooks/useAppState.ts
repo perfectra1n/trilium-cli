@@ -3,19 +3,21 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+
+import type { Note, NoteTreeItem } from '../../types/api.js';
+import type { 
+  LogLevel,
+  ContentFormat} from '../types/index.js';
 import { 
   InputMode, 
-  ViewMode, 
-  LogLevel,
+  ViewMode,
   SplitPane,
-  ContentFormat,
   type AppState, 
   type LogEntry, 
   type RecentNote,
   type BookmarkedNote,
   type FuzzySearchResult,
 } from '../types/index.js';
-import type { Note, NoteTreeItem } from '../../types/api.js';
 
 const DEFAULT_STATE: AppState = {
   // Connection state
@@ -197,7 +199,7 @@ export function useAppState() {
   // Recent notes actions
   const addRecentNote = useCallback((note: RecentNote) => {
     setState(prev => {
-      const filtered = prev.recentNotes.filter(r => r.noteId !== note.noteId);
+      const filtered = prev.recentNotes.filter(r => r.ownerId !== note.ownerId);
       return {
         ...prev,
         recentNotes: [note, ...filtered].slice(0, 50), // Keep last 50
@@ -208,7 +210,7 @@ export function useAppState() {
   // Bookmark actions
   const addBookmark = useCallback((note: BookmarkedNote) => {
     setState(prev => {
-      const exists = prev.bookmarkedNotes.some(b => b.noteId === note.noteId);
+      const exists = prev.bookmarkedNotes.some(b => b.ownerId === note.ownerId);
       if (exists) return prev;
       
       return {
@@ -221,7 +223,7 @@ export function useAppState() {
   const removeBookmark = useCallback((ownerId: string) => {
     setState(prev => ({
       ...prev,
-      bookmarkedNotes: prev.bookmarkedNotes.filter(b => b.noteId !== noteId),
+      bookmarkedNotes: prev.bookmarkedNotes.filter(b => b.ownerId !== ownerId),
     }));
   }, []);
 

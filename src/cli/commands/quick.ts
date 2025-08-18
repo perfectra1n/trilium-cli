@@ -1,12 +1,13 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
-import type { QuickOptions } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
+import type { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
 import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import { isDefined } from '../../utils/type-guards.js';
+import type { QuickOptions } from '../types.js';
 
 /**
  * Set up quick capture command
@@ -27,12 +28,12 @@ export function setupQuickCommand(program: Command): void {
       
       try {
         // Get content from argument or stdin
-        let content = content;
-        if (!content) {
-          content = await readStdin();
+        let finalContent = content;
+        if (!finalContent) {
+          finalContent = await readStdin();
         }
         
-        if (!content.trim()) {
+        if (!finalContent.trim()) {
           throw new TriliumError('No content provided');
         }
         
@@ -41,7 +42,8 @@ export function setupQuickCommand(program: Command): void {
         await config.load();
         
         // Get inbox from options or config
-        const inboxId = options.inbox || config.getCurrentProfile().inboxNoteId;
+        const profile = config.getCurrentProfile();
+        const inboxId = options.inbox || (profile as any).inboxNoteId;
         
         if (!inboxId) {
           throw new TriliumError('No inbox note configured. Set inbox note ID in profile or use --inbox option.');
@@ -49,7 +51,7 @@ export function setupQuickCommand(program: Command): void {
         
         // Handle batch mode
         if (options.batch) {
-          const notes = await createBatchNotes(content, options, client, inboxId, logger);
+          const notes = await createBatchNotes(finalContent, options, client, inboxId, logger);
           
           if (options.quiet) {
             notes.forEach(note => console.log(note.noteId));
@@ -67,7 +69,7 @@ export function setupQuickCommand(program: Command): void {
         }
         
         // Single note creation
-        const note = await createQuickNote(content, options, client, inboxId);
+        const note = await createQuickNote(finalContent, options, client, inboxId);
         
         if (options.quiet) {
           console.log(note.noteId);
@@ -123,13 +125,16 @@ async function createBatchNotes(
   inboxId: string,
   logger: any
 ): Promise<any[]> {
-  const parts = content.split(options.batch!);
+  if (!isDefined(options.batch)) {
+    throw new Error('Batch delimiter is required for batch mode');
+  }
+  const parts = content.split(options.batch);
   const notes = [];
   
   logger.info(`Creating ${parts.length} quick notes...`);
   
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
+    const part = parts[i]?.trim() || '';
     if (!part) continue;
     
     try {
@@ -166,7 +171,7 @@ async function createQuickNote(
     parentNoteId: inboxId,
   };
   
-  const note = await client.createNote(noteData);
+  const result = await client.createNote(noteData);
   
   // Add tags if specified
   const tags = [];
@@ -174,7 +179,7 @@ async function createQuickNote(
     const tagList = options.tags.split(',').map(t => t.trim());
     for (const tag of tagList) {
       await client.createAttribute({
-        ownerId: note.noteId,
+        noteId: result.note.noteId,
         type: 'label',
         name: tag,
         value: ''
@@ -185,13 +190,13 @@ async function createQuickNote(
   
   // Add quick capture label
   await client.createAttribute({
-    ownerId: note.noteId,
+    noteId: result.note.noteId,
     type: 'label',
     name: 'quickCapture',
     value: new Date().toISOString()
   });
   
-  return { ...note, tags };
+  return { ...result, tags };
 }
 
 /**
@@ -230,7 +235,7 @@ function processTodoFormat(content: string): {
   let processedContent = '';
   
   // Extract title from first line if it's not a todo item
-  if (lines.length > 0 && !lines[0].match(/^[-*\s]*\[[\sx]\]/i)) {
+  if (lines.length > 0 && lines[0] && !lines[0].match(/^[-*\s]*\[[\sx]\]/i)) {
     title = lines[0].trim();
     lines.shift();
   }

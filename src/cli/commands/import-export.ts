@@ -1,21 +1,12 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { existsSync, statSync, createReadStream } from 'fs';
 import { resolve, extname } from 'path';
 
-import type {
-  ImportObsidianOptions,
-  ExportObsidianOptions,
-  ImportNotionOptions,
-  ExportNotionOptions,
-  ImportDirOptions,
-  SyncGitOptions,
-} from '../types.js';
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
 import { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 import { 
   ImportExportManager,
   importObsidian,
@@ -31,6 +22,17 @@ import {
   type GitConfig,
   type ProgressEvent
 } from '../../import-export/index.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import { isDefined } from '../../utils/type-guards.js';
+import type {
+  ImportObsidianOptions,
+  ExportObsidianOptions,
+  ImportNotionOptions,
+  ExportNotionOptions,
+  ImportDirOptions,
+  SyncGitOptions,
+} from '../types.js';
 
 /**
  * Set up import/export commands
@@ -99,7 +101,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));
@@ -200,7 +204,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));
@@ -305,7 +311,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));
@@ -398,7 +406,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));
@@ -505,7 +515,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));
@@ -618,7 +630,9 @@ export function setupImportExportCommands(program: Command): void {
           if (event.type === 'start') {
             logger.info(event.message);
           } else if (event.type === 'progress') {
-            const percent = event.total ? Math.round((event.current! / event.total) * 100) : 0;
+            const percent = event.total && isDefined(event.current) 
+              ? Math.round((event.current / event.total) * 100) 
+              : 0;
             logger.info(`${event.message} (${percent}%)`);
           } else if (event.type === 'complete') {
             logger.info(chalk.green(event.message));

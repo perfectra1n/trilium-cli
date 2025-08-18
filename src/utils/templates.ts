@@ -46,7 +46,7 @@ const BUILT_IN_VARIABLES = {
   datetime: () => new Date().toLocaleString(),
   timestamp: () => Date.now().toString(),
   iso_date: () => new Date().toISOString().split('T')[0],
-  iso_time: () => new Date().toISOString().split('T')[1].split('.')[0],
+  iso_time: () => new Date().toISOString().split('T')[1]?.split('.')[0] ?? '',
   iso_datetime: () => new Date().toISOString(),
   year: () => new Date().getFullYear().toString(),
   month: () => (new Date().getMonth() + 1).toString().padStart(2, '0'),
@@ -129,6 +129,8 @@ export function extractTemplateVariables(
   
   while ((match = VARIABLE_PATTERNS.COMBINED.exec(content)) !== null) {
     const [, fullName, defaultValue] = match;
+    
+    if (!fullName) continue;
     
     // Security: Limit number of variables per template
     if (++variableCount > SECURITY_PATTERNS.MAX_VARIABLES_PER_TEMPLATE) {
@@ -342,7 +344,7 @@ export function generateTemplatePreview(
         usedSampleData[variable.name] = generateSampleValue(variable.name);
       }
     } else {
-      usedSampleData[variable.name] = sampleData[variable.name];
+      usedSampleData[variable.name] = sampleData[variable.name] || '';
     }
   }
   
@@ -367,8 +369,8 @@ export function getBuiltInVariables(): Array<{ name: string; description: string
     { name: 'time', description: 'Current time (localized)', example: new Date().toLocaleTimeString() },
     { name: 'datetime', description: 'Current date and time (localized)', example: new Date().toLocaleString() },
     { name: 'timestamp', description: 'Current timestamp (milliseconds)', example: Date.now().toString() },
-    { name: 'iso_date', description: 'Current date (ISO format)', example: new Date().toISOString().split('T')[0] },
-    { name: 'iso_time', description: 'Current time (ISO format)', example: new Date().toISOString().split('T')[1].split('.')[0] },
+    { name: 'iso_date', description: 'Current date (ISO format)', example: new Date().toISOString().split('T')[0] || '' },
+    { name: 'iso_time', description: 'Current time (ISO format)', example: new Date().toISOString().split('T')[1]?.split('.')[0] || '' },
     { name: 'iso_datetime', description: 'Current date and time (ISO format)', example: new Date().toISOString() },
     { name: 'year', description: 'Current year', example: new Date().getFullYear().toString() },
     { name: 'month', description: 'Current month (01-12)', example: (new Date().getMonth() + 1).toString().padStart(2, '0') },
@@ -395,7 +397,11 @@ function processVariables(
 ): string {
   VARIABLE_PATTERNS.COMBINED.lastIndex = 0;
   
-  return content.replace(VARIABLE_PATTERNS.COMBINED, (match, fullName, defaultValue) => {
+  return content.replace(VARIABLE_PATTERNS.COMBINED, (match: string, ...args: string[]) => {
+    const fullName = args[0];
+    const defaultValue = args[1];
+    if (!fullName) return match;
+    
     const isBuiltIn = fullName.startsWith('@');
     const variableName = isBuiltIn ? fullName.slice(1) : fullName;
     
@@ -422,8 +428,8 @@ function processVariables(
       if (variableName in BUILT_IN_VARIABLES) {
         try {
           const value = BUILT_IN_VARIABLES[variableName as keyof typeof BUILT_IN_VARIABLES]();
-          resolvedVariables.push({ name: variableName, value, isBuiltIn: true });
-          return value;
+          resolvedVariables.push({ name: variableName, value: value || '', isBuiltIn: true });
+          return value || '';
         } catch (error) {
           securityWarnings.push(`Error evaluating built-in variable @${variableName}: ${error}`);
           return options.preserveUnresolved ? match : '';
@@ -436,8 +442,8 @@ function processVariables(
     
     // Handle user variables
     if (variableName in variables) {
-      const value = sanitizeValue(variables[variableName]);
-      resolvedVariables.push({ name: variableName, value, isBuiltIn: false });
+      const value = sanitizeValue(variables[variableName] || '');
+      resolvedVariables.push({ name: variableName, value: value, isBuiltIn: false });
       return value;
     }
     

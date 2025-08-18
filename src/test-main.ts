@@ -4,7 +4,6 @@
  * Basic integration test for the main application components
  */
 
-import { Application, handleApplicationError } from './main.js';
 import { 
   TriliumError,
   ConfigError,
@@ -12,6 +11,7 @@ import {
   EnhancedError,
   ValidationError 
 } from './error.js';
+import { Application, handleApplicationError } from './main.js';
 import { createLogger } from './utils/logger.js';
 
 async function testErrorSystem() {

@@ -1,8 +1,10 @@
-import { join, relative, dirname, basename, extname } from 'path';
 import { readFile } from 'fs/promises';
+import { join, relative, dirname, basename, extname } from 'path';
+
 import matter from 'gray-matter';
 
 import type { TriliumClient } from '../../api/client.js';
+import type { NoteType, MimeType, NoteWithContent } from '../../types/api.js';
 import type {
   ImportHandler,
   ExportHandler,
@@ -174,14 +176,15 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
     
     for (let i = 0; i < markdownFiles.length; i++) {
       const file = markdownFiles[i];
+      if (!file) continue;
       
       try {
         const result = await this.importMarkdownFile(file, config, context, noteIdMap);
         results.push(result);
         
-        if (result.success && result.success ? noteId : undefined) {
-          noteIdMap.set(file.path, result.success ? noteId : undefined);
-          created.push(result.success ? noteId : undefined);
+        if (result.success && result.ownerId) {
+          noteIdMap.set(file.path, result.ownerId);
+          created.push(result.ownerId);
         }
 
         await progress.progress(i + 1, `Imported markdown: ${file.name}`);
@@ -198,20 +201,21 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
         };
         
         results.push(errorResult);
-        errors.addError(error);
+        errors.addError(error instanceof Error ? error : new Error(String(error)));
       }
     }
 
     // Process attachments
     for (let i = 0; i < attachmentFiles.length; i++) {
       const file = attachmentFiles[i];
+      if (!file) continue;
       
       try {
         const result = await this.importAttachmentFile(file, config, context, noteIdMap);
         results.push(result);
         
-        if (result.success && result.success ? noteId : undefined) {
-          attachments.push(result.success ? noteId : undefined);
+        if (result.success && result.ownerId) {
+          attachments.push(result.ownerId);
         }
 
         await progress.progress(markdownFiles.length + i + 1, `Imported attachment: ${file.name}`);
@@ -228,7 +232,7 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
         };
         
         results.push(errorResult);
-        errors.addError(error);
+        errors.addError(error instanceof Error ? error : new Error(String(error)));
       }
     }
 
@@ -347,25 +351,41 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
       const existingNote = await this.findExistingNote(file, config, context);
       
       if (existingNote && config.duplicateHandling === 'overwrite') {
-        noteId = (await this.client.updateNote(existingNote.noteId, noteData)).noteId;
+        // Update note metadata only (title, type, mime, isProtected)
+        const updateData = {
+          title: noteData.title,
+          type: noteData.type as 'text',
+          mime: noteData.mime as 'text/html',
+        };
+        const updatedNote = await this.client.updateNote(existingNote.ownerId, updateData);
+        noteId = updatedNote.noteId;
+        
+        // Update content separately
+        if (noteData.content) {
+          await this.client.updateNoteContent(noteId, noteData.content);
+        }
       } else if (existingNote && config.duplicateHandling === 'skip') {
         return {
           file,
-          ownerId: existingNote.noteId,
+          ownerId: existingNote.ownerId,
           success: true,
           skipped: true,
           reason: 'Note already exists and duplicate handling is set to skip',
         };
       } else {
-        noteId = (await this.client.createNote({
-          ...noteData,
+        const createdNote = await this.client.createNote({
           parentNoteId: parentNoteId || 'root',
-        })).noteId;
+          title: noteData.title,
+          content: noteData.content || '',
+          type: noteData.type as 'text',
+          mime: noteData.mime as 'text/html',
+        });
+        noteId = createdNote.note.noteId;
       }
 
       return {
         file,
-        noteId,
+        ownerId: noteId,
         success: true,
         skipped: false,
         metadata: {
@@ -397,7 +417,7 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
 
       // Create attachment
       const attachmentData = await readFile(file.fullPath);
-      const attachmentId = await this.client.createAttachment({
+      const attachment = await this.client.createAttachment({
         ownerId: parentNoteId || 'root',
         title: file.name,
         content: attachmentData.toString('base64'),
@@ -407,12 +427,12 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
 
       return {
         file,
-        ownerId: attachmentId,
+        ownerId: attachment.attachmentId,
         success: true,
         skipped: false,
         metadata: {
           parentNoteId,
-          attachmentId,
+          attachmentId: attachment.attachmentId,
         },
       };
 
@@ -449,7 +469,7 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
     // Create folder note if createMissingParents is enabled
     if (config.createMissingParents) {
       try {
-        const folderNoteId = await this.client.createNote({
+        const folderNote = await this.client.createNote({
           title: basename(folderPath),
           content: `# ${basename(folderPath)}\n\nFolder imported from Obsidian vault.`,
           type: 'text',
@@ -457,8 +477,8 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
           parentNoteId: 'root', // TODO: Handle nested folders
         });
 
-        noteIdMap.set(folderPath, folderNoteId);
-        return folderNoteId;
+        noteIdMap.set(folderPath, folderNote.note.noteId);
+        return folderNote.note.noteId;
       } catch (error) {
         console.warn(`Could not create folder note for ${folderPath}:`, error);
       }
@@ -528,7 +548,10 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
     // Search for existing note by original path attribute
     try {
       const searchResults = await this.client.searchNotes(`#original-path = "${file.path}"`);
-      return searchResults.length > 0 ? { ownerId: searchResults[0].noteId } : null;
+      if (searchResults && searchResults.length > 0 && searchResults[0]) {
+        return { ownerId: searchResults[0].noteId };
+      }
+      return null;
     } catch (error) {
       return null;
     }
@@ -548,15 +571,18 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
         try {
           // Check if the note references this attachment
           const note = await this.client.getNote(noteId);
-          if (note && note.content) {
-            const hasReference = 
-              note.content.includes(`[[${fileName}]]`) ||
-              note.content.includes(`[[${fileNameWithoutExt}]]`) ||
-              note.content.includes(`](${fileName})`) ||
-              note.content.includes(`](${file.path})`);
+          if (note) {
+            const noteContent = await this.client.getNoteContent(noteId);
+            if (noteContent) {
+              const hasReference = 
+                noteContent.includes(`[[${fileName}]]`) ||
+                noteContent.includes(`[[${fileNameWithoutExt}]]`) ||
+                noteContent.includes(`](${fileName})`) ||
+                noteContent.includes(`](${file.path})`);
 
-            if (hasReference) {
-              return noteId;
+              if (hasReference) {
+                return noteId;
+              }
             }
           }
         } catch (error) {
@@ -577,17 +603,22 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
     for (const [notePath, noteId] of noteIdMap) {
       try {
         const note = await this.client.getNote(noteId);
-        if (!note || !note.content) continue;
+        if (!note) continue;
+        
+        const noteContent = await this.client.getNoteContent(noteId);
+        if (!noteContent) continue;
 
-        let updatedContent = note.content;
+        let updatedContent = noteContent;
         let hasChanges = false;
 
         // Find all wikilinks
         const wikilinkRegex = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
         let match;
 
-        while ((match = wikilinkRegex.exec(note.content)) !== null) {
+        while ((match = wikilinkRegex.exec(noteContent)) !== null) {
           const [fullMatch, linkTarget, linkText] = match;
+          if (!linkTarget) continue;
+          
           const displayText = linkText || linkTarget;
 
           // Try to find the target note
@@ -603,9 +634,7 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
 
         // Update note if changes were made
         if (hasChanges) {
-          await this.client.updateNote(noteId, {
-            content: updatedContent,
-          });
+          await this.client.updateNoteContent(noteId, updatedContent);
         }
 
       } catch (error) {
@@ -653,7 +682,7 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
 
     for (const noteId of noteIds) {
       try {
-        const note = await this.client.getNote(noteId);
+        const note = await this.client.getNoteWithContent(noteId);
         if (!note) continue;
 
         // Plan note export
@@ -698,9 +727,13 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
           });
         }
 
-        // Plan descendant notes
-        const descendants = await this.client.getNoteDescendants(noteId);
-        for (const descendant of descendants) {
+        // Plan descendant notes (using child notes for now)
+        const childNoteIds = note.childNoteIds || [];
+        for (const childNoteId of childNoteIds) {
+          const descendant = await this.client.getNote(childNoteId);
+          if (!descendant) continue;
+          
+          const descendantContent = await this.client.getNoteContent(childNoteId);
           const descendantFileName = sanitizeFileName(descendant.title) + '.md';
           const descendantPath = config.preserveFolderStructure 
             ? join(sanitizeFileName(note.title), descendantFileName)
@@ -713,7 +746,7 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
             relativePath: descendantPath,
             name: descendantFileName,
             extension: 'md',
-            size: (descendant.content || '').length,
+            size: (descendantContent || '').length,
             depth: config.preserveFolderStructure ? 1 : 0,
             metadata: {
               ownerId: descendant.noteId,
@@ -791,6 +824,7 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
     // Process each planned file
     for (let i = 0; i < plannedFiles.length; i++) {
       const file = plannedFiles[i];
+      if (!file) continue;
       
       try {
         const result = await this.exportFile(file, config, context);
@@ -818,7 +852,7 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
         };
         
         results.push(errorResult);
-        errors.addError(error);
+        errors.addError(error instanceof Error ? error : new Error(String(error)));
       }
     }
 
@@ -907,7 +941,7 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
 
     return {
       file,
-      noteId,
+      ownerId: noteId,
       success: true,
       skipped: false,
       metadata: {
@@ -1005,13 +1039,13 @@ export class ObsidianExportHandler implements ExportHandler<ObsidianConfig> {
     // Add note content
     if (note.content) {
       // Convert Trilium links back to wikilinks if configured
-      let content = note.content;
+      let processedContent = note.content;
       
       if (config.preserveWikilinks) {
-        content = this.convertTriliumLinksToWikilinks(content);
+        processedContent = this.convertTriliumLinksToWikilinks(processedContent);
       }
 
-      content += content;
+      content += processedContent;
     }
 
     return content;

@@ -2,9 +2,11 @@ import { createHash } from 'crypto';
 import { promises as fs, constants } from 'fs';
 import { stat, readFile, writeFile, mkdir } from 'fs/promises';
 import { basename, dirname, extname, join, relative, resolve } from 'path';
-import { lookup } from 'mime-types';
-import matter from 'gray-matter';
+
 import { glob } from 'glob';
+import matter from 'gray-matter';
+import { lookup } from 'mime-types';
+
 import {
   validateSecurePath,
   validateDirectoryPath as validateSecureDirectoryPath,
@@ -14,7 +16,6 @@ import {
   validateFileSize,
   validateFileAccess,
 } from './secure-path.js';
-
 import type {
   FileInfo,
   ContentInfo,
@@ -23,9 +24,8 @@ import type {
   ContentParser,
   ContentFormatter,
   FormatType,
-  ImportExportError,
 } from './types.js';
-import { FileInfoSchema, ContentInfoSchema } from './types.js';
+import { FileInfoSchema, ContentInfoSchema, ImportExportError } from './types.js';
 
 /**
  * File processing utilities
@@ -57,6 +57,7 @@ export async function scanFiles(
     blockedPatterns: [
       /\.\./,           // Directory traversal
       /~[\\/]/,         // Home directory reference  
+      // eslint-disable-next-line no-control-regex
       /[\x00-\x1f]/,    // Control characters
       /\$\{/,           // Variable expansion
       /`/,              // Command substitution
@@ -197,7 +198,7 @@ export async function copyFile(sourcePath: string, targetPath: string): Promise<
   }
 }
 
-export async function readTextFile(filePath: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
+export async function readTextFile(filePath: string, encoding: 'utf8' | 'ascii' | 'base64' | 'hex' | 'binary' | 'utf16le' = 'utf8'): Promise<string> {
   try {
     // Validate and secure the file path
     const securePath = await validateFilePath(filePath);
@@ -220,7 +221,7 @@ export async function readTextFile(filePath: string, encoding: BufferEncoding = 
 export async function writeTextFile(
   filePath: string, 
   content: string, 
-  encoding: BufferEncoding = 'utf8'
+  encoding: 'utf8' | 'ascii' | 'base64' | 'hex' | 'binary' | 'utf16le' = 'utf8'
 ): Promise<void> {
   try {
     // Validate the file path for security
@@ -407,7 +408,9 @@ export class HtmlParser implements ContentParser {
       const metaTags: Record<string, any> = {};
       const metaMatches = content.matchAll(/<meta[^>]+name=["']([^"']+)["'][^>]+content=["']([^"']+)["'][^>]*>/gi);
       for (const match of metaMatches) {
-        metaTags[match[1]] = match[2];
+        if (match[1] && match[2]) {
+          metaTags[match[1]] = match[2];
+        }
       }
 
       return ContentInfoSchema.parse({

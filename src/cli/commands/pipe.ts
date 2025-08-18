@@ -1,13 +1,16 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { readFileSync } from 'fs';
 
-import type { PipeOptions } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import type { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
+import type { NoteType } from '../../types/api.js';
 import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import { isDefined, getElementAt, hasContent } from '../../utils/type-guards.js';
+import type { PipeOptions } from '../types.js';
 
 /**
  * Set up pipe command for creating notes from stdin
@@ -107,14 +110,18 @@ async function handleBatchMode(
   client: TriliumClient, 
   logger: any
 ): Promise<void> {
-  const parts = content.split(options.batchDelimiter!);
+  if (!isDefined(options.batchDelimiter)) {
+    throw new Error('Batch delimiter is required for batch mode');
+  }
+  const parts = content.split(options.batchDelimiter);
   const notes = [];
   
   logger.info(`Creating ${parts.length} notes from batch content...`);
   
   for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
+    const part = getElementAt(parts, i, `Failed to get part at index ${i}`);
+    const trimmedPart = part.trim();
+    if (!trimmedPart) continue;
     
     try {
       const note = await createNoteFromContent(part, {
@@ -128,7 +135,7 @@ async function handleBatchMode(
   }
   
   if (options.quiet) {
-    notes.forEach(note => console.log(note.noteId));
+    notes.forEach(note => console.log(note.note ? note.note.noteId : note.noteId));
   } else {
     const output = formatOutput(notes, options.output, [
       'noteId', 'title', 'type', 'dateCreated'
@@ -181,24 +188,24 @@ async function createNoteFromContent(
   const noteData: any = {
     title: extractedTitle || 'Piped Content',
     content: processedContent,
-    type: detectedType || 'text',
-    parentNoteId: options.parent,
+    type: (detectedType || 'text') as NoteType,
+    parentNoteId: options.parent || 'root',
   };
   
   // Apply template if specified
   if (options.template) {
-    const template = await client.getNote(options.template);
+    const template = await client.getNoteWithContent(options.template);
     noteData.content = template.content.replace('{{CONTENT}}', processedContent);
   }
   
-  const note = await client.createNote(noteData);
+  const result = await client.createNote(noteData);
   
   // Add attributes if specified
   if (options.tags) {
     const tags = options.tags.split(',').map(t => t.trim());
     for (const tag of tags) {
       await client.createAttribute({
-        ownerId: note.noteId,
+        noteId: result.note.noteId,
         type: 'label',
         name: tag,
         value: ''
@@ -210,7 +217,7 @@ async function createNoteFromContent(
     const labels = options.labels.split(',').map(l => l.trim());
     for (const label of labels) {
       await client.createAttribute({
-        ownerId: note.noteId,
+        noteId: result.note.noteId,
         type: 'label',
         name: label,
         value: ''
@@ -222,15 +229,15 @@ async function createNoteFromContent(
     for (const attr of options.attributes) {
       const [name, value] = attr.split('=', 2);
       await client.createAttribute({
-        ownerId: note.noteId,
+        noteId: result.note.noteId,
         type: 'label',
-        name: name.trim(),
+        name: name?.trim() || '',
         value: value ? value.trim() : ''
       });
     }
   }
   
-  return note;
+  return result;
 }
 
 /**
@@ -292,7 +299,7 @@ function extractTitleFromContent(content: string, format?: string): string | und
     if (titleMatch) return titleMatch[1];
     
     const h1Match = content.match(/<h1[^>]*>(.*?)<\/h1>/i);
-    if (h1Match) return h1Match[1].replace(/<[^>]+>/g, '');
+    if (h1Match?.[1]) return h1Match[1].replace(/<[^>]+>/g, '');
   }
   
   // Markdown title extraction

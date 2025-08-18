@@ -22,7 +22,8 @@
   "main": "./dist/lib/index.js",
   "types": "./dist/lib/index.d.ts",
   "bin": {
-    "trilium": "./dist/bin/trilium.js"
+    "trilium": "./dist/bin/trilium.js",
+    "trilium-core": "./dist-core/core-cli.js"
   },
   "exports": {
     ".": {
@@ -38,21 +39,39 @@
   "scripts": {
     "build": "tsc && chmod +x dist/bin/trilium.js",
     "build:watch": "tsc --watch",
+    "build:minimal": "tsc -p tsconfig.minimal.json && chmod +x dist/minimal-cli.js",
+    "build:core": "tsc -p tsconfig.core.json && chmod +x dist-core/core-cli.js",
+    "build:core:watch": "tsc -p tsconfig.core.json --watch",
     "dev": "tsx src/bin/trilium.ts",
     "dev:watch": "tsx watch src/bin/trilium.ts",
+    "dev:minimal": "tsx src/minimal-cli.ts",
+    "dev:core": "tsx src/core-cli.ts",
     "start": "node dist/bin/trilium.js",
+    "start:minimal": "node dist/minimal-cli.js",
+    "start:core": "node dist-core/core-cli.js",
     "test": "vitest",
     "test:watch": "vitest --watch",
+    "test:minimal": "vitest src/minimal-cli.test.ts --run",
     "test:coverage": "vitest --coverage",
+    "test:integration": "vitest run test/integration/live-api-integration.test.ts --reporter=verbose",
+    "test:integration:watch": "vitest test/integration/live-api-integration.test.ts --reporter=verbose",
+    "test:integration:all": "vitest run test/integration/ --reporter=verbose",
+    "test:performance": "vitest run test/integration/performance-benchmark.test.ts --reporter=verbose",
+    "test:errors": "vitest run test/integration/error-handling.test.ts --reporter=verbose",
+    "test:live": "tsx test/integration/run-live-tests.ts",
+    "test:live:debug": "TRILIUM_TEST_DEBUG=true tsx test/integration/run-live-tests.ts",
+    "test:live:no-cleanup": "TRILIUM_TEST_CLEANUP=false tsx test/integration/run-live-tests.ts",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json}\"",
     "typecheck": "tsc --noEmit",
+    "typecheck:minimal": "tsc -p tsconfig.minimal.json --noEmit",
     "clean": "rm -rf dist",
     "validate": "npm run typecheck && npm run build",
     "validate:with-lint": "npm run typecheck && npm run lint && npm run build",
     "validate:full": "npm run clean && npm run validate && npm test -- --run",
+    "validate:minimal": "npm run typecheck:minimal && npm run build:minimal && npm run test:minimal",
     "prepare": "npm run build"
   },
   "dependencies": {

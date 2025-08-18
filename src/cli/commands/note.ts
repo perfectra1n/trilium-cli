@@ -1,9 +1,18 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { createReadStream, existsSync, writeFileSync } from 'fs';
 import { resolve, extname, basename } from 'path';
 
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import type { NoteType, ExportFormat } from '../../types/api.js';
+import type { OutputFormat } from '../../types/common.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
+  BaseCommandOptions,
   NoteCreateOptions,
   NoteGetOptions,
   NoteUpdateOptions,
@@ -14,11 +23,6 @@ import type {
   NoteMoveOptions,
   NoteCloneOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up note management commands
@@ -48,25 +52,26 @@ export function setupNoteCommands(program: Command): void {
         // Open editor if requested or no content provided
         if (options.edit || (!content && !process.stdin.isTTY)) {
           const { openEditor } = await import('../../utils/editor.js');
-          content = await openEditor(content);
+          const editorResult = await openEditor(content);
+          content = editorResult.content;
         }
         
         const noteData = {
           title,
           content,
-          type: options.noteType || 'text',
-          parentNoteId: options.parent
+          type: (options.noteType || 'text') as NoteType,
+          parentNoteId: options.parent || 'root'
         };
         
-        const note = await client.createNote(noteData);
+        const result = await client.createNote(noteData);
         
-        const output = formatOutput([note], options.output, [
-          'noteId', 'title', 'type', 'parentNoteId', 'dateCreated'
+        const output = formatOutput([result.note], options.output, [
+          'noteId', 'title', 'type', 'parentNoteIds', 'dateCreated'
         ]);
         console.log(output);
         
         if (options.output === 'table') {
-          logger.info(chalk.green(`Note created successfully: ${note.noteId}`));
+          logger.info(chalk.green(`Note created successfully: ${result.note.noteId}`));
         }
         
       } catch (error) {
@@ -85,20 +90,24 @@ export function setupNoteCommands(program: Command): void {
       
       try {
         const client = await createTriliumClient(options);
-        const note = await client.getNote(noteId, options.content);
+        const note = options.content ? 
+          await client.getNoteWithOptionalContent(noteId, true) : 
+          await client.getNote(noteId);
         
         const columns = [
           'noteId', 'title', 'type', 'mime', 'isProtected', 
           'dateCreated', 'dateModified'
         ];
         
-        if (options.content && note.content) {
+        // Handle content if it's a NoteWithContent
+        const noteWithContent = note as any;
+        if (options.content && noteWithContent.content) {
           columns.push('contentLength');
-          note.contentLength = `${note.content.length} chars`;
+          noteWithContent.contentLength = `${noteWithContent.content.length} chars`;
           
           // Show content preview for table output
-          if (options.output === 'table' && note.content.length > 200) {
-            note.contentPreview = note.content.substring(0, 200) + '...';
+          if (options.output === 'table' && noteWithContent.content.length > 200) {
+            noteWithContent.contentPreview = noteWithContent.content.substring(0, 200) + '...';
             columns.push('contentPreview');
           } else if (options.output === 'table') {
             columns.push('content');
@@ -109,8 +118,8 @@ export function setupNoteCommands(program: Command): void {
         console.log(output);
         
         // Show full content for JSON output or if specifically requested
-        if (options.content && note.content && options.output === 'json') {
-          console.log(JSON.stringify({ ...note, content: note.content }, null, 2));
+        if (options.content && noteWithContent.content && options.output === 'json') {
+          console.log(JSON.stringify({ ...note, content: noteWithContent.content }, null, 2));
         }
         
       } catch (error) {
@@ -140,9 +149,10 @@ export function setupNoteCommands(program: Command): void {
           updates.content = options.content;
         } else if (options.edit) {
           // Get current content for editing
-          const currentNote = await client.getNote(noteId, true);
+          const currentNote = await client.getNoteWithContent(noteId);
           const { openEditor } = await import('../../utils/editor.js');
-          updates.content = await openEditor(currentNote.content || '');
+          const editorResult = await openEditor(currentNote.content || '');
+          updates.content = editorResult.content;
         }
         
         if (Object.keys(updates).length === 0) {
@@ -226,7 +236,7 @@ export function setupNoteCommands(program: Command): void {
         const client = await createTriliumClient(options);
         
         if (options.tree) {
-          const tree = await client.getNoteTree(parentId, options.depth);
+          const tree = await client.getNoteTree(parentId, { depth: options.depth });
           
           if (options.output === 'json') {
             console.log(JSON.stringify(tree, null, 2));
@@ -243,8 +253,7 @@ export function setupNoteCommands(program: Command): void {
         }
         
         if (options.output === 'table') {
-          const count = options.tree ? 'tree structure' : `${Array.isArray(notes) ? notes.length : 'N/A'} note(s)`;
-          logger.info(chalk.green(`Displayed ${count} for parent ${parentId}`));
+          logger.info(chalk.green(`Displayed notes for parent ${parentId}`));
         }
         
       } catch (error) {
@@ -263,14 +272,16 @@ export function setupNoteCommands(program: Command): void {
       const logger = createLogger(options.verbose);
       
       try {
-        const client = await createTriliumClient(options);
+        // Ensure output format is provided for createTriliumClient
+        const clientOptions = { ...options, output: options.output || 'json' } as BaseCommandOptions;
+        const client = await createTriliumClient(clientOptions);
         
         logger.info(`Exporting note ${noteId} as ${options.format}...`);
         
-        const exportResult = await client.exportNote(noteId, options.format);
+        const exportResult = await client.exportNote(noteId, (options.format || 'html') as ExportFormat);
         
         // Determine output path
-        let outputPath = options.output;
+        let outputPath = (options as any).output;
         if (!outputPath) {
           const note = await client.getNote(noteId);
           const extension = options.format === 'pdf' ? 'pdf' : 
@@ -278,23 +289,23 @@ export function setupNoteCommands(program: Command): void {
           outputPath = `${note.title.replace(/[^a-zA-Z0-9]/g, '_')}.${extension}`;
         }
         
-        // Write to file
-        if (typeof exportResult.content === 'string') {
-          writeFileSync(outputPath, exportResult.content);
-        } else {
-          // Handle binary content (like PDF)
-          writeFileSync(outputPath, exportResult.content);
-        }
+        // Write to file - exportResult is an ArrayBuffer
+        const buffer = Buffer.from(exportResult);
+        writeFileSync(outputPath, buffer);
         
-        const output = formatOutput([{
+        const formatData = [{
           noteId,
-          format: options.format,
+          format: options.format || 'html',
           outputFile: outputPath,
-          size: `${exportResult.size || 0} bytes`
-        }], options.output, ['noteId', 'format', 'outputFile', 'size']);
+          size: `${buffer.byteLength} bytes`
+        }];
+        
+        // Use the base options.output property, accessing through a type assertion
+        const outputFormat: OutputFormat = (options as any).output || 'table';
+        const output = formatOutput(formatData, outputFormat, ['noteId', 'format', 'outputFile', 'size']);
         console.log(output);
         
-        if (options.output === 'table') {
+        if (outputFormat === 'table') {
           logger.info(chalk.green(`Note exported to ${outputPath}`));
         }
         
@@ -337,16 +348,16 @@ export function setupNoteCommands(program: Command): void {
         const content = readFileSync(resolvedPath, 'utf8');
         const title = basename(resolvedPath, extname(resolvedPath));
         
-        const note = await client.createNote({
+        const result = await client.createNote({
           title,
           content,
-          type: format === 'markdown' ? 'text' : format,
-          parentNoteId: options.parent
+          type: (format === 'markdown' ? 'text' : format) as NoteType,
+          parentNoteId: options.parent || 'root'
         });
         
         const output = formatOutput([{
-          ownerId: note.noteId,
-          title: note.title,
+          noteId: result.note.noteId,
+          title: result.note.title,
           importedFrom: filePath,
           format,
           size: `${content.length} chars`
@@ -354,7 +365,7 @@ export function setupNoteCommands(program: Command): void {
         console.log(output);
         
         if (options.output === 'table') {
-          logger.info(chalk.green(`File imported as note: ${note.noteId}`));
+          logger.info(chalk.green(`File imported as note: ${result.note.noteId}`));
         }
         
       } catch (error) {
@@ -379,7 +390,7 @@ export function setupNoteCommands(program: Command): void {
         
         const output = formatOutput([{
           noteId,
-          oldParent: result.oldParentId,
+          oldParent: 'unknown',
           newParent: parentId,
           moved: true
         }], options.output, ['noteId', 'oldParent', 'newParent', 'moved']);
@@ -406,18 +417,20 @@ export function setupNoteCommands(program: Command): void {
       try {
         const client = await createTriliumClient(options);
         
-        const result = await client.cloneNote(noteId, options.cloneType === 'deep');
+        // For now, cloning creates another branch to root
+        const result = await client.cloneNote(noteId, 'root');
         
         const output = formatOutput([{
           originalNoteId: noteId,
-          clonedNoteId: result.noteId,
+          branchId: result.branchId,
+          parentNoteId: result.parentNoteId,
           cloneType: options.cloneType,
           success: true
-        }], options.output, ['originalNoteId', 'clonedNoteId', 'cloneType', 'success']);
+        }], options.output, ['originalNoteId', 'branchId', 'parentNoteId', 'cloneType', 'success']);
         console.log(output);
         
         if (options.output === 'table') {
-          logger.info(chalk.green(`Note cloned successfully: ${result.noteId}`));
+          logger.info(chalk.green(`Note cloned successfully with branch: ${result.branchId}`));
         }
         
       } catch (error) {

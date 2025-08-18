@@ -3,7 +3,8 @@
  */
 
 import { useCallback, useRef } from 'react';
-import { TriliumClient } from '../../api/client.js';
+
+import type { TriliumClient } from '../../api/client.js';
 import type { 
   Note, 
   NoteTreeItem, 
@@ -95,13 +96,13 @@ export function useApi({ client, onLogOperation, debugMode = false }: UseApiOpti
 
   const loadNote = useCallback(async (ownerId: string): Promise<Note> => {
     return withErrorHandling('loadNote', async () => {
-      return client.getNote(noteId);
+      return client.getNote(ownerId);
     });
   }, [client, withErrorHandling]);
 
   const loadNoteContent = useCallback(async (ownerId: string): Promise<string> => {
     return withErrorHandling('loadNoteContent', async () => {
-      return client.getNoteContent(noteId);
+      return client.getNoteContent(ownerId);
     });
   }, [client, withErrorHandling]);
 
@@ -114,19 +115,19 @@ export function useApi({ client, onLogOperation, debugMode = false }: UseApiOpti
 
   const updateNote = useCallback(async (ownerId: string, def: UpdateNoteDef): Promise<Note> => {
     return withErrorHandling('updateNote', async () => {
-      return client.updateNote(noteId, def);
+      return client.updateNote(ownerId, def);
     });
   }, [client, withErrorHandling]);
 
   const updateNoteContent = useCallback(async (ownerId: string, content: string): Promise<void> => {
     return withErrorHandling('updateNoteContent', async () => {
-      await client.updateNoteContent(noteId, content);
+      await client.updateNoteContent(ownerId, content);
     });
   }, [client, withErrorHandling]);
 
   const deleteNote = useCallback(async (ownerId: string): Promise<void> => {
     return withErrorHandling('deleteNote', async () => {
-      await client.deleteNote(noteId);
+      await client.deleteNote(ownerId);
     });
   }, [client, withErrorHandling]);
 

@@ -2,8 +2,9 @@
  * StatusBar component for displaying status information and help
  */
 
-import React from 'react';
 import { Box, Text } from 'ink';
+import React from 'react';
+
 import { InputMode, ViewMode } from '../types/index.js';
 
 interface StatusBarProps {

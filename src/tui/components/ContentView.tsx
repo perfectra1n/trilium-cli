@@ -2,10 +2,12 @@
  * ContentView component for displaying note content and metadata
  */
 
-import React from 'react';
 import { Box, Text } from 'ink';
+import React from 'react';
+
 import type { Note } from '../../types/api.js';
-import type { ViewMode, RecentNote, BookmarkedNote } from '../types/index.js';
+import { ViewMode } from '../types/index.js';
+import type { RecentNote, BookmarkedNote } from '../types/index.js';
 
 interface ContentViewProps {
   note: Note | null;
@@ -103,7 +105,7 @@ function NoteContentView({ note, content, contentScroll }: NoteContentViewProps)
           </Box>
           <Box>
             <Text bold color="cyan">ID: </Text>
-            <Text>{note.note.noteId}</Text>
+            <Text>{note.noteId}</Text>
           </Box>
           <Box>
             <Text bold color="cyan">Type: </Text>
@@ -156,7 +158,7 @@ function RecentNotesView({ notes, selectedIndex }: RecentNotesViewProps): JSX.El
           <Text dimColor>No recent notes</Text>
         ) : (
           notes.map((note, index) => (
-            <Box key={note.note.noteId}>
+            <Box key={note.ownerId}>
               <Text 
                 color={index === selectedIndex ? 'black' : 'white'}
                 backgroundColor={index === selectedIndex ? 'white' : undefined}
@@ -189,7 +191,7 @@ function BookmarksView({ notes, selectedIndex }: BookmarksViewProps): JSX.Elemen
           <Text dimColor>No bookmarked notes</Text>
         ) : (
           notes.map((note, index) => (
-            <Box key={note.note.noteId}>
+            <Box key={note.ownerId}>
               <Text 
                 color={index === selectedIndex ? 'black' : 'white'}
                 backgroundColor={index === selectedIndex ? 'white' : undefined}

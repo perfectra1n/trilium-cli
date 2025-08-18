@@ -2,12 +2,14 @@
  * SplitView component for split pane layout
  */
 
-import React from 'react';
 import { Box } from 'ink';
+import React from 'react';
+
 import type { Note, NoteTreeItem } from '../../types/api.js';
-import { SplitPane } from '../types/index.js';
-import { TreeView } from './TreeView.js';
+import { SplitPane, ViewMode } from '../types/index.js';
+
 import { ContentView } from './ContentView.js';
+import { TreeView } from './TreeView.js';
 
 interface SplitViewProps {
   treeItems: NoteTreeItem[];
@@ -61,7 +63,7 @@ export function SplitView({
           note={currentNote}
           content={currentContent}
           contentScroll={contentScroll}
-          viewMode="Content" as any // Force content view mode
+          viewMode={ViewMode.Content}
           recentNotes={[]}
           bookmarkedNotes={[]}
           selectedIndex={0}

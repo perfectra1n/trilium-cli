@@ -1,16 +1,16 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
 import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage } from '../../utils/cli.js';
+import { openFile } from '../../utils/editor.js';
+import { createLogger } from '../../utils/logger.js';
 import type { 
   ConfigShowOptions, 
   ConfigSetOptions,
   BaseCommandOptions 
 } from '../types.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage } from '../../utils/cli.js';
-import { openFile } from '../../utils/editor.js';
-import { TriliumError } from '../../error.js';
 
 /**
  * Set up configuration commands
@@ -25,7 +25,7 @@ export function setupConfigCommands(program: Command): void {
     .command('show')
     .description('Show current configuration')
     .option('--path', 'Show configuration file path only')
-    .action(async (options: ConfigShowOptions) => {
+    .action(async (options: ConfigShowOptions & { path?: boolean }) => {
       const logger = createLogger(options.verbose);
       
       try {
@@ -50,7 +50,7 @@ export function setupConfigCommands(program: Command): void {
             name: p.name,
             baseUrl: p.serverUrl,
             hasToken: !!p.apiToken,
-            isDefault: p.default || false,
+            isDefault: p.isDefault || false,
             isCurrent: p.name === data.currentProfile
           }))
         };
@@ -113,11 +113,13 @@ export function setupConfigCommands(program: Command): void {
         
         // Confirmation prompt
         if (!options.yes) {
-          const { confirm } = await import('inquirer');
-          const answer = await confirm({
+          const inquirer = (await import('inquirer')).default;
+          const { confirm: answer } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
             message: 'Are you sure you want to reset the configuration to defaults? This will remove all profiles and settings.',
             default: false
-          });
+          }]);
           
           if (!answer) {
             logger.info('Configuration reset cancelled');
@@ -160,7 +162,7 @@ export function setupConfigCommands(program: Command): void {
         
         // Validate and set the configuration value
         switch (key) {
-          case 'currentProfile':
+          case 'currentProfile': {
             const profiles = config.getProfiles();
             const profile = profiles.find(p => p.name === value);
             if (!profile) {
@@ -168,17 +170,19 @@ export function setupConfigCommands(program: Command): void {
             }
             config.setCurrentProfile(value);
             break;
+          }
             
           case 'version':
             // Version is managed by the system
             throw new TriliumError('Version cannot be set manually');
             
-          default:
+          default: {
             // For extensibility - allow setting arbitrary values
             const newData = { ...data, [key]: value };
             config.setData(newData);
             logger.warn(formatWarningMessage(`Setting custom configuration key: ${key}`));
             break;
+          }
         }
         
         await config.save();

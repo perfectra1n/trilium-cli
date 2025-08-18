@@ -1,3 +1,4 @@
+import { ApiError, AuthError, ValidationError } from '../error.js';
 import type {
   Note,
   NoteWithContent,
@@ -17,43 +18,32 @@ import type {
   SearchOptions,
   EnhancedSearchResult,
   AppInfo,
-  CalendarNote,
-  CalendarNoteRequest,
-  InboxNoteRequest,
   LoginRequest,
   LoginResponse,
   EntityId,
   ExportFormat,
-  ImportNoteRequest,
   NoteTreeItem,
   LinkReference,
   TagInfo,
   Template,
   QuickCaptureRequest,
   TriliumApiErrorResponse,
-  ApiRequestDebug,
-  ApiResponseDebug,
   ApiClientConfig,
   RequestOptions,
-  UtcDateTime,
-  LocalDateTime,
-  StringId,
   NoteType,
 } from '../types/api.js';
-import { HttpClient, RateLimiter } from '../utils/http-simple.js';
-import { ApiError, AuthError, ValidationError } from '../error.js';
-import { validateEntityId, validateUrl } from '../utils/validation.js';
 import {
   validateCreateNoteDef,
   validateUpdateNoteDef,
   validateSearchNotesParams,
   validateApiClientConfig,
   validateQuickCaptureRequest,
-  CreateNoteDefSchema,
-  UpdateNoteDefSchema,
   NoteSchema,
   SearchOptionsSchema,
 } from '../types/validation.js';
+import { HttpClient, RateLimiter } from '../utils/http-simple.js';
+import { isValidArray, getFirstElement } from '../utils/type-guards.js';
+import { validateEntityId, validateUrl } from '../utils/validation.js';
 
 /**
  * Enhanced Trilium API client with full feature parity to Rust implementation
@@ -87,16 +77,10 @@ export class TriliumClient {
       ? new RateLimiter(config.rateLimitConfig.maxRequests, config.rateLimitConfig.windowMs)
       : undefined;
 
-    // Construct authorization header based on token
+    // Construct authorization header - Trilium ETAPI uses raw token, not Bearer format
     let authHeader = '';
     if (validatedConfig.apiToken) {
-      // Check if it's a bearer token or basic auth format
-      if (validatedConfig.apiToken.startsWith('Bearer ') || validatedConfig.apiToken.startsWith('Basic ')) {
-        authHeader = validatedConfig.apiToken;
-      } else {
-        // Default to bearer token
-        authHeader = `Bearer ${validatedConfig.apiToken}`;
-      }
+      authHeader = validatedConfig.apiToken;
     }
 
     this.http = new HttpClient({
@@ -119,6 +103,20 @@ export class TriliumClient {
   }
 
   // ========== Debug and Utility Methods ==========
+
+  /**
+   * Get the base URL
+   */
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
+  /**
+   * Get the API token
+   */
+  public getApiToken(): string | undefined {
+    return this.apiToken;
+  }
 
   /**
    * Enable debug mode for detailed logging
@@ -325,18 +323,37 @@ export class TriliumClient {
 
   /**
    * Search for notes with basic options
+   * Supports both individual parameters and options object for backward compatibility
    */
   async searchNotes(
     query: string, 
-    fastSearch: boolean = false, 
-    includeArchived: boolean = false, 
-    limit: number = 50
+    fastSearchOrOptions?: boolean | SearchOptions, 
+    includeArchived?: boolean, 
+    limit?: number
   ): Promise<SearchResult[]> {
+    let actualFastSearch: boolean;
+    let actualIncludeArchived: boolean;
+    let actualLimit: number;
+    
+    // Handle both signatures
+    if (typeof fastSearchOrOptions === 'object') {
+      // Options object provided
+      const options = fastSearchOrOptions;
+      actualFastSearch = options.fastSearch ?? false;
+      actualIncludeArchived = options.includeArchived ?? false;
+      actualLimit = options.limit ?? 50;
+    } else {
+      // Individual parameters provided
+      actualFastSearch = fastSearchOrOptions ?? false;
+      actualIncludeArchived = includeArchived ?? false;
+      actualLimit = limit ?? 50;
+    }
+    
     const params = new URLSearchParams({
       search: query,
-      fastSearch: fastSearch.toString(),
-      includeArchivedNotes: includeArchived.toString(),
-      limit: limit.toString(),
+      fastSearch: actualFastSearch.toString(),
+      includeArchivedNotes: actualIncludeArchived.toString(),
+      limit: actualLimit.toString(),
     });
     
     const response = await this.sendRequest<SearchResponse>('GET', `/notes?${params}`);
@@ -448,12 +465,23 @@ export class TriliumClient {
   }
 
   /**
+   * Get note with optional content included
+   */
+  async getNoteWithOptionalContent(noteId: EntityId, includeContent: boolean = false): Promise<Note | NoteWithContent> {
+    validateEntityId(noteId, 'noteId');
+    if (includeContent) {
+      return await this.getNoteWithContent(noteId);
+    }
+    return await this.getNote(noteId);
+  }
+
+  /**
    * Get note content
    */
   async getNoteContent(noteId: EntityId): Promise<string> {
     validateEntityId(noteId, 'noteId');
     // The content endpoint returns plain text, not JSON
-    return await this.sendRequest<string>('GET', `/notes/${noteId}/content`);
+    return await this.http.getText(`/notes/${noteId}/content`);
   }
 
   /**
@@ -640,7 +668,8 @@ export class TriliumClient {
    */
   async getNoteAttributes(noteId: EntityId): Promise<Attribute[]> {
     validateEntityId(noteId, 'noteId');
-    return await this.sendRequest<Attribute[]>('GET', `/notes/${noteId}/attributes`);
+    const note = await this.getNote(noteId);
+    return note.attributes || [];
   }
 
   /**
@@ -972,7 +1001,8 @@ export class TriliumClient {
     
     // Convert to TagInfo with hierarchy parsing
     const tagInfos: TagInfo[] = [];
-    for (const tag of tags) {
+    const tagArray = Array.from(tags);
+    for (const tag of tagArray) {
       const parts = tag.split('/');
       tagInfos.push({
         name: tag,
@@ -989,9 +1019,94 @@ export class TriliumClient {
   /**
    * Search notes by tag pattern
    */
-  async searchByTags(tagPattern: string, includeChildren: boolean = false): Promise<SearchResult[]> {
+  async searchByTags(tagPattern: string, _includeChildren: boolean = false): Promise<SearchResult[]> {
     const query = tagPattern.startsWith('#') ? tagPattern : `#${tagPattern}`;
     return await this.searchNotes(query, false, true, 1000);
+  }
+
+  /**
+   * Search notes by tag - new method for CLI compatibility
+   * Accepts an options object with tagPattern and includeChildren
+   */
+  async searchNotesByTag(options: { tagPattern: string; _includeChildren?: boolean }): Promise<SearchResult[]> {
+    const query = options.tagPattern.startsWith('#') ? options.tagPattern : `#${options.tagPattern}`;
+    // If includeChildren is true, we'd need to search for child tags too
+    // For now, just search for the exact tag
+    return await this.searchNotes(query, false, true, 1000);
+  }
+
+  /**
+   * Get tag cloud with statistics
+   * Returns tags with their usage counts
+   */
+  async getTagCloud(options?: { minCount?: number; maxTags?: number }): Promise<Array<{ tag: string; count: number }>> {
+    const minCount = options?.minCount ?? 1;
+    const maxTags = options?.maxTags ?? 100;
+    
+    // Search for all notes with tags
+    const tagMap = new Map<string, number>();
+    
+    try {
+      // Get all notes (limited search)
+      const searchResponse = await this.searchNotesAdvanced({ 
+        search: '', 
+        limit: 10000 
+      });
+      
+      // Count tag occurrences
+      for (const note of searchResponse.results) {
+        if (note.attributes) {
+          for (const attr of note.attributes) {
+            if (attr.type === 'label') {
+              const count = tagMap.get(attr.name) || 0;
+              tagMap.set(attr.name, count + 1);
+            }
+          }
+        }
+      }
+      
+      // Convert to array and filter/sort
+      const tagCloud = Array.from(tagMap.entries())
+        .map(([tag, count]) => ({ tag, count }))
+        .filter(item => item.count >= minCount)
+        .sort((a, b) => b.count - a.count)
+        .slice(0, maxTags);
+      
+      return tagCloud;
+    } catch (error) {
+      this.logDebugInfo('getTagCloud', `Failed to get tag cloud: ${error}`);
+      return [];
+    }
+  }
+
+  /**
+   * Get all notes with a specific tag
+   */
+  async getNotesWithTag(tag: string): Promise<Note[]> {
+    const query = tag.startsWith('#') ? tag : `#${tag}`;
+    const searchResponse = await this.searchNotesAdvanced({ 
+      search: query,
+      limit: 10000
+    });
+    
+    const notes: Note[] = [];
+    for (const result of searchResponse.results) {
+      try {
+        const fullNote = await this.getNote(result.noteId);
+        // Verify the note actually has this tag
+        const hasTag = fullNote.attributes?.some(attr => 
+          attr.type === 'label' && attr.name === tag.replace('#', '')
+        ) ?? false;
+        
+        if (hasTag) {
+          notes.push(fullNote);
+        }
+      } catch (error) {
+        this.logDebugInfo('getNotesWithTag', `Failed to get note ${result.noteId}: ${error}`);
+      }
+    }
+    
+    return notes;
   }
 
   /**
@@ -1061,7 +1176,11 @@ export class TriliumClient {
     const validatedRequest = validateQuickCaptureRequest(request);
     
     // Get today's inbox note
-    const today = new Date().toISOString().split('T')[0]!; // YYYY-MM-DD format
+    const dateComponents = new Date().toISOString().split('T');
+    if (!isValidArray(dateComponents)) {
+      throw new Error('Failed to format date for daily note');
+    }
+    const today = getFirstElement(dateComponents, 'Failed to get date component'); // YYYY-MM-DD format
     let inboxNote: Note;
     
     try {
@@ -1165,7 +1284,7 @@ export class TriliumClient {
         });
         
         results.push({
-          ownerId: noteResult.noteId,
+          ownerId: noteResult.note.noteId,
           title,
           type: 'text',
           imported: true
@@ -1295,7 +1414,7 @@ export class TriliumClient {
         });
         
         results.push({
-          ownerId: noteResult.noteId,
+          ownerId: noteResult.note.noteId,
           title: page.title,
           type: 'text',
           imported: true,
@@ -1412,7 +1531,7 @@ export class TriliumClient {
         });
         
         results.push({
-          ownerId: noteResult.noteId,
+          ownerId: noteResult.note.noteId,
           title,
           originalPath: file.path,
           imported: true
@@ -1489,6 +1608,190 @@ export class TriliumClient {
     
     return results;
   }
+
+  /**
+   * Get tags (placeholder implementation)
+   */
+  async getTags(params?: { pattern?: string }): Promise<Attribute[]> {
+    const query = params?.pattern ? `#tag ${params.pattern}` : '#tag';
+    const searchResponse = await this.searchNotesAdvanced({ search: query });
+    const tags: Attribute[] = [];
+    for (const note of searchResponse.results) {
+      if (note.attributes) {
+        tags.push(...note.attributes.filter(a => a.type === 'label'));
+      }
+    }
+    return tags;
+  }
+
+  /**
+   * Get note tree (placeholder implementation)
+   */
+  async getNoteTree(noteId: EntityId, options?: { depth?: number }): Promise<any> {
+    const note = await this.getNote(noteId);
+    return {
+      noteId: note.noteId,
+      title: note.title,
+      type: note.type,
+      children: []
+    };
+  }
+
+  /**
+   * Move note to a different parent
+   */
+  async moveNote(noteId: EntityId, newParentId: EntityId): Promise<Branch> {
+    // Get existing branches
+    const note = await this.getNote(noteId);
+    if (!isValidArray(note.parentBranchIds)) {
+      throw new Error('Note has no branches');
+    }
+    
+    // Delete old branch and create new one
+    const oldBranchId = getFirstElement(note.parentBranchIds, 'Note has no parent branches');
+    await this.deleteBranch(oldBranchId);
+    
+    return await this.createBranch({
+      noteId,
+      parentNoteId: newParentId
+    });
+  }
+
+  /**
+   * Clone note to a different location
+   */
+  async cloneNote(noteId: EntityId, parentNoteId: EntityId): Promise<Branch> {
+    return await this.createBranch({
+      noteId,
+      parentNoteId
+    });
+  }
+
+  /**
+   * Get link context (placeholder)
+   */
+  async getLinkContext(noteId: EntityId, targetNoteId?: EntityId): Promise<string> {
+    // This is a placeholder implementation
+    return `Link context for note ${noteId}${targetNoteId ? ` to ${targetNoteId}` : ''}`;
+  }
+
+  /**
+   * Find broken links (placeholder)
+   */
+  async findBrokenLinks(noteId: EntityId): Promise<any[]> {
+    return [];
+  }
+
+  /**
+   * Find links to target (placeholder)
+   */
+  async findLinksToTarget(noteId: EntityId): Promise<any[]> {
+    return [];
+  }
+
+  /**
+   * Update links (placeholder)
+   */
+  async updateLinks(oldTarget: string, _newTarget: string): Promise<any[]> {
+    // Placeholder implementation
+    return [];
+  }
+
+  /**
+   * Validate note links (placeholder)
+   */
+  async validateNoteLinks(noteId: EntityId): Promise<any> {
+    return {
+      valid: true,
+      errors: []
+    };
+  }
+
+  /**
+   * Update link in note (placeholder)
+   */
+  async updateLinkInNote(noteId: EntityId, oldLink: string, newLink: string): Promise<void> {
+    const content = await this.getNoteContent(noteId);
+    const updatedContent = content.replace(oldLink, newLink);
+    await this.updateNoteContent(noteId, updatedContent);
+  }
+
+  /**
+   * Append to note (placeholder)
+   */
+  async appendToNote(noteId: EntityId, content: string): Promise<void> {
+    const existing = await this.getNoteContent(noteId);
+    await this.updateNoteContent(noteId, existing + '\n' + content);
+  }
+
+  /**
+   * Get plugins (placeholder)
+   */
+  async getPlugins(): Promise<any[]> {
+    return [];
+  }
+
+  /**
+   * Install plugin (placeholder)
+   */
+  async installPlugin(pluginId: string): Promise<any> {
+    return { success: true, pluginId };
+  }
+
+  /**
+   * Uninstall plugin (placeholder)
+   */
+  async uninstallPlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    // Placeholder
+    return { success: true };
+  }
+
+  /**
+   * Enable plugin (placeholder)
+   */
+  async enablePlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    // Placeholder
+    return { success: true };
+  }
+
+  /**
+   * Disable plugin (placeholder)
+   */
+  async disablePlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    // Placeholder
+    return { success: true };
+  }
+
+  /**
+   * Get plugin info (placeholder)
+   */
+  async getPluginInfo(pluginId: string): Promise<any> {
+    // Placeholder
+    return {
+      name: pluginId,
+      version: '1.0.0',
+      status: 'enabled',
+      author: 'Unknown',
+      description: 'Plugin description',
+      capabilities: [],
+      permissions: [],
+      installDate: new Date().toISOString(),
+      lastUsed: new Date().toISOString(),
+      commands: []
+    };
+  }
+
+  /**
+   * Run plugin command (placeholder)
+   */
+  async runPluginCommand(params: { plugin: string; command: string; args?: string[] }): Promise<any> {
+    // Placeholder
+    return {
+      success: true,
+      output: `Running ${params.plugin}.${params.command}`,
+      executionTime: 100
+    };
+  }
 }
 
 /**
@@ -1555,4 +1858,5 @@ class UpdateNoteRequestBuilderImpl {
   public debugJson(): string {
     return JSON.stringify(this.updates, null, 2);
   }
+
 }

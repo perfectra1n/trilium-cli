@@ -1,8 +1,12 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
 import { Config } from '../../config/index.js';
+import { TriliumError, ValidationError } from '../../error.js';
 import type { Profile } from '../../types/config.js';
+import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import { validateUrl } from '../../utils/validation.js';
 import type { 
   ProfileListOptions, 
   ProfileCreateOptions, 
@@ -10,10 +14,6 @@ import type {
   ProfileSetOptions,
   BaseCommandOptions 
 } from '../types.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage, createTriliumClient } from '../../utils/cli.js';
-import { TriliumError, ValidationError } from '../../error.js';
-import { validateUrl } from '../../utils/validation.js';
 
 /**
  * Set up profile management commands
@@ -53,10 +53,10 @@ export function setupProfileCommands(program: Command): void {
         const displayProfiles = profiles.map(p => {
           const base = {
             name: p.name,
-            baseUrl: p.serverUrl,
+            serverUrl: p.serverUrl,
             hasToken: !!p.apiToken,
             isCurrent: p.name === currentProfile,
-            isDefault: p.default || false
+            isDefault: p.isDefault || false
           };
           
           if (options.detailed) {
@@ -128,10 +128,12 @@ export function setupProfileCommands(program: Command): void {
         
         // Interactive mode if missing required info
         if (!serverUrl || !apiToken) {
-          const { input, password } = await import('inquirer');
+          const inquirer = (await import('inquirer')).default;
           
           if (!serverUrl) {
-            serverUrl = await input({
+            const { serverUrl: url } = await inquirer.prompt([{
+              type: 'input',
+              name: 'serverUrl',
               message: 'Enter Trilium server URL:',
               validate: (url: string) => {
                 try {
@@ -141,25 +143,32 @@ export function setupProfileCommands(program: Command): void {
                   return error instanceof Error ? error.message : 'Invalid URL';
                 }
               }
-            });
+            }]);
+            serverUrl = url;
           }
           
           if (!apiToken) {
-            apiToken = await password({
+            const { apiToken: token } = await inquirer.prompt([{
+              type: 'password',
+              name: 'apiToken',
               message: 'Enter API token:',
               validate: (token: string) => {
                 if (!token.trim()) return 'API token is required';
                 if (!token.startsWith('etapi')) return 'API token must start with "etapi"';
                 return true;
               }
-            });
+            }]);
+            apiToken = token;
           }
           
           if (!description) {
-            description = await input({
+            const { description: desc } = await inquirer.prompt([{
+              type: 'input',
+              name: 'description',
               message: 'Enter profile description (optional):',
               default: ''
-            });
+            }]);
+            description = desc;
           }
         }
         
@@ -173,10 +182,10 @@ export function setupProfileCommands(program: Command): void {
         // Create profile
         const profile: Profile = {
           name,
-          baseUrl: serverUrl!,
+          serverUrl: serverUrl!,
           apiToken: apiToken!,
           description: description || undefined,
-          default: options.default || existingProfiles.length === 0,
+          isDefault: options.default || existingProfiles.length === 0,
           created: new Date().toISOString()
         };
         
@@ -186,7 +195,7 @@ export function setupProfileCommands(program: Command): void {
           try {
             const testClient = await createTriliumClient({
               ...options,
-              baseUrl: profile.serverUrl,
+              serverUrl: profile.serverUrl,
               apiToken: profile.apiToken
             });
             
@@ -204,7 +213,7 @@ export function setupProfileCommands(program: Command): void {
         if (options.output === 'table') {
           logger.info(formatSuccessMessage(`Profile '${name}' created successfully`));
           
-          if (profile.default) {
+          if (profile.isDefault) {
             logger.info(`Set '${name}' as the default profile`);
           }
         } else {
@@ -212,9 +221,9 @@ export function setupProfileCommands(program: Command): void {
             success: true,
             profile: {
               name: profile.name,
-              baseUrl: profile.serverUrl,
+              serverUrl: profile.serverUrl,
               hasToken: !!profile.apiToken,
-              isDefault: profile.default,
+              isDefault: profile.isDefault,
               isCurrent: true
             },
             message: 'Profile created successfully'
@@ -250,11 +259,13 @@ export function setupProfileCommands(program: Command): void {
         
         // Confirmation prompt
         if (!options.force) {
-          const { confirm } = await import('inquirer');
-          const answer = await confirm({
+          const inquirer = (await import('inquirer')).default;
+          const { confirm: answer } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
             message: `Are you sure you want to remove profile '${name}'?`,
             default: false
-          });
+          }]);
           
           if (!answer) {
             logger.info('Profile removal cancelled');
@@ -332,7 +343,7 @@ export function setupProfileCommands(program: Command): void {
           const output = formatOutput({
             success: true,
             currentProfile: name,
-            baseUrl: profile.serverUrl,
+            serverUrl: profile.serverUrl,
             message: 'Profile switched successfully'
           }, options.output);
           console.log(output);
@@ -370,11 +381,11 @@ export function setupProfileCommands(program: Command): void {
         
         const profileDetails = {
           name: targetProfile.name,
-          baseUrl: targetProfile.serverUrl,
+          serverUrl: targetProfile.serverUrl,
           hasToken: !!targetProfile.apiToken,
           tokenPrefix: targetProfile.apiToken ? targetProfile.apiToken.substring(0, 10) + '...' : 'none',
           description: targetProfile.description || '(no description)',
-          isDefault: targetProfile.default || false,
+          isDefault: targetProfile.isDefault || false,
           isCurrent: targetProfile.name === config.getData().currentProfile,
           created: targetProfile.created || '(unknown)',
           lastUsed: targetProfile.lastUsed || '(never)'
@@ -420,7 +431,7 @@ export function setupProfileCommands(program: Command): void {
         // Test connection
         const client = await createTriliumClient({
           ...options,
-          baseUrl: targetProfile.serverUrl,
+          serverUrl: targetProfile.serverUrl,
           apiToken: targetProfile.apiToken
         });
         
@@ -430,7 +441,7 @@ export function setupProfileCommands(program: Command): void {
         
         const testResult = {
           profile: targetProfile.name,
-          baseUrl: targetProfile.serverUrl,
+          serverUrl: targetProfile.serverUrl,
           status: 'success',
           appVersion: appInfo.appVersion,
           dbVersion: appInfo.dbVersion,

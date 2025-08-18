@@ -1,10 +1,12 @@
+import { createReadStream, createWriteStream, existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join, relative, dirname, basename, extname, resolve } from 'path';
-import { readFile, createWriteStream } from 'fs/promises';
-import { createReadStream, existsSync } from 'fs';
-import archiver from 'archiver';
-import { admZipLoader, grayMatterLoader } from '../dependency-loader.js';
 
+// archiver import will be handled dynamically if needed
 import type { TriliumClient } from '../../api/client.js';
+import type { NoteType, MimeType } from '../../types/api.js';
+import { ensureDefined } from '../../utils/type-guards.js';
+import { admZipLoader, grayMatterLoader } from '../dependency-loader.js';
 import type {
   ImportHandler,
   ExportHandler,
@@ -185,7 +187,8 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
     }
 
     // Extract ZIP to temporary directory
-    const pages = await this.extractNotionZip(config.zipPath!, config);
+    const zipPath = ensureDefined(config.zipPath, 'ZIP path is required for Notion import');
+    const pages = await this.extractNotionZip(zipPath, config);
     const pageMap = new Map<string, string>(); // pageId -> noteId
 
     // Import pages in hierarchical order
@@ -196,13 +199,14 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
     const attachmentFiles = files.filter(f => f.metadata?.isAttachment);
     for (let i = 0; i < attachmentFiles.length; i++) {
       const file = attachmentFiles[i];
+      if (!file) continue;
       
       try {
         const result = await this.importAttachment(file, pageMap, config, context);
         results.push(result);
         
-        if (result.success && result.noteId) {
-          attachments.push(result.noteId);
+        if (result.success && result.ownerId) {
+          attachments.push(result.ownerId);
         }
 
         await progress.progress(files.length - attachmentFiles.length + i + 1, `Imported attachment: ${file.name}`);
@@ -219,7 +223,7 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
         };
         
         results.push(errorResult);
-        errors.addError(error);
+        errors.addError(error instanceof Error ? error : new Error(String(error)));
       }
     }
 
@@ -421,7 +425,16 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
       };
     }
 
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+    const firstLine = lines[0];
+    if (!firstLine) {
+      return {
+        content: '',
+        properties: {},
+        blocks: [],
+      };
+    }
+
+    const headers = firstLine.split(',').map(h => h.trim().replace(/"/g, ''));
     const rows = lines.slice(1).map(line => 
       line.split(',').map(cell => cell.trim().replace(/"/g, ''))
     );
@@ -462,15 +475,16 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
   private parseNotionBlocks(content: string): NotionBlock[] {
     const blocks: NotionBlock[] = [];
     const lines = content.split('\n');
-    let currentBlock: NotionBlock | null = null;
+    const currentBlock: NotionBlock | null = null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      if (!line) continue;
 
       // Handle different block types
       if (line.match(/^#{1,6}\s/)) {
         // Heading block
-        const level = line.match(/^(#{1,6})/)?.[1].length || 1;
+        const level = line.match(/^(#{1,6})/)?.[1]?.length || 1;
         const text = line.replace(/^#{1,6}\s/, '');
         
         blocks.push({
@@ -494,8 +508,10 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
         const codeLines: string[] = [];
         i++; // Skip the opening ```
         
-        while (i < lines.length && !lines[i].match(/^```/)) {
-          codeLines.push(lines[i]);
+        while (i < lines.length) {
+          const currentLine = lines[i];
+          if (!currentLine || currentLine.match(/^```/)) break;
+          codeLines.push(currentLine);
           i++;
         }
         
@@ -586,7 +602,7 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
 
         results.push({
           file: fileInfo,
-          noteId,
+          ownerId: noteId,
           success: true,
           skipped: false,
           metadata: {
@@ -653,10 +669,14 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
       attributes,
     };
 
-    const noteId = await this.client.createNote({
-      ...noteData,
+    const result = await this.client.createNote({
       parentNoteId: parentNoteId || 'root',
+      title: noteData.title,
+      type: noteData.type as NoteType,
+      content: noteData.content,
+      mime: noteData.mime as MimeType,
     });
+    const noteId = result.note.noteId;
 
     return noteId;
   }
@@ -683,21 +703,21 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
       const attachmentContent = await readFile(file.fullPath);
 
       // Create attachment in Trilium
-      const attachmentId = await this.client.createAttachment({
+      const attachment = await this.client.createAttachment({
         title: file.name,
-        content: attachmentContent,
+        content: attachmentContent.toString('base64'),
         mime: file.mimeType || 'application/octet-stream',
-        notePosition: 0,
-        parentNoteId,
+        role: 'file',
+        ownerId: parentNoteId,
       });
 
       return {
         file,
-        ownerId: attachmentId,
+        ownerId: attachment.attachmentId,
         success: true,
         skipped: false,
         metadata: {
-          attachmentId,
+          attachmentId: attachment.attachmentId,
           parentNoteId,
         },
       };
@@ -749,9 +769,10 @@ export class NotionImportHandler implements ImportHandler<NotionConfig> {
       case 'quote':
         return `<blockquote>${this.escapeHtml(block.content || '')}</blockquote>\n`;
       
-      case 'code':
+      case 'code': {
         const language = block.properties?.language || '';
         return `<pre><code class="language-${language}">${this.escapeHtml(block.content || '')}</code></pre>\n`;
+      }
       
       case 'table':
         return block.content || '';
@@ -890,6 +911,9 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
         const note = await this.client.getNote(noteId);
         if (!note) continue;
 
+        // Get note content for size calculation
+        const content = await this.client.getNoteContent(noteId);
+
         // Plan note export
         const fileName = sanitizeFileName(note.title) + '.md';
         const outputPath = join(context.tempDirectory, fileName);
@@ -900,7 +924,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
           relativePath: fileName,
           name: fileName,
           extension: 'md',
-          size: (note.content || '').length,
+          size: (content || '').length,
           depth: 0,
           metadata: {
             noteId,
@@ -909,9 +933,13 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
           },
         });
 
-        // Plan descendant notes
-        const descendants = await this.client.getNoteDescendants(noteId);
-        for (const descendant of descendants) {
+        // Plan descendant notes using childNoteIds
+        if (note.childNoteIds && note.childNoteIds.length > 0) {
+          for (const childId of note.childNoteIds) {
+            const descendant = await this.client.getNote(childId);
+            if (!descendant) continue;
+            
+            const descendantContent = await this.client.getNoteContent(childId);
           const descendantFileName = sanitizeFileName(descendant.title) + '.md';
           const descendantPath = join(sanitizeFileName(note.title), descendantFileName);
           const descendantOutputPath = join(context.tempDirectory, descendantPath);
@@ -922,7 +950,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
             relativePath: descendantPath,
             name: descendantFileName,
             extension: 'md',
-            size: (descendant.content || '').length,
+            size: (descendantContent || '').length,
             depth: 1,
             metadata: {
               ownerId: descendant.noteId,
@@ -931,6 +959,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
               parentNoteId: noteId,
             },
           });
+          }
         }
 
         // Plan attachments
@@ -1025,6 +1054,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
     // Export all files
     for (let i = 0; i < plannedFiles.length; i++) {
       const file = plannedFiles[i];
+      if (!file) continue;
       
       try {
         const result = await this.exportFile(file, config, context);
@@ -1052,7 +1082,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
         };
         
         results.push(errorResult);
-        errors.addError(error);
+        errors.addError(error instanceof Error ? error : new Error(String(error)));
       }
     }
 
@@ -1133,7 +1163,7 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
 
     return {
       file,
-      noteId,
+      ownerId: noteId,
       success: true,
       skipped: false,
       metadata: {
@@ -1235,6 +1265,19 @@ export class NotionExportHandler implements ExportHandler<NotionConfig> {
 
   private async createNotionZip(tempDir: string, zipPath: string): Promise<void> {
     try {
+      // Try to load archiver dynamically
+      let archiver: any;
+      try {
+        const archiverModule = await import('archiver' as any);
+        archiver = archiverModule.default || archiverModule;
+      } catch {
+        throw new ImportExportError(
+          'archiver package is required for Notion export but not installed',
+          'MISSING_DEPENDENCY',
+          { dependency: 'archiver', installCommand: 'npm install archiver' }
+        );
+      }
+
       const archive = archiver('zip', { zlib: { level: 9 } });
       const output = createWriteStream(zipPath);
 

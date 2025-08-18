@@ -4,6 +4,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+pnpm-lock.yaml
 
 # Runtime data
 pids
@@ -20,7 +21,9 @@ coverage/
 
 # Build outputs
 dist/
+dist-core/
 build/
+test-build/
 *.tsbuildinfo
 
 # Runtime configuration files
@@ -34,6 +37,7 @@ build/
 .cache/
 .tmp/
 *.tmp
+node-compile-cache/
 
 # OS files
 .DS_Store
@@ -62,3 +66,55 @@ trilium-config.json
 # Test results
 test-results/
 junit.xml
+
+# Test and debug files (development artifacts)
+debug-*.js
+debug-*.ts
+test-*.js
+test-*.ts
+http-test.js
+direct-test.js
+test-simple-tui.js
+*-test.js
+*-debug.js
+*-debug.ts
+
+# Claude artifacts
+.claude/
+
+# Temporary shell scripts
+run-integration-tests.sh
+test-minimal-cli.sh
+*.sh
+
+# Temporary markdown files
+demo-*.md
+README-minimal.md
+
+# Compiled JavaScript files in src (shouldn't be there)
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+
+# Integration test temporary files
+test/integration/*.js
+test/integration/*.js.map
+test/integration/*.d.ts
+
+# Misc temporary files
+*.bak
+*.orig
+*.rej
+.history/
+
+# Local test data
+test-data/
+test-notes/
+test-exports/
+
+# npm pack output
+*.tgz
+
+# Temporary minimized configs
+tsconfig.minimal.json
+tsconfig.core.json

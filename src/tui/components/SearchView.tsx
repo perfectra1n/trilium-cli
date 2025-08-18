@@ -2,8 +2,9 @@
  * SearchView component for displaying search results
  */
 
-import React from 'react';
 import { Box, Text } from 'ink';
+import React from 'react';
+
 import type { Note } from '../../types/api.js';
 
 interface SearchViewProps {
@@ -42,7 +43,7 @@ export function SearchView({ results, query, selectedIndex }: SearchViewProps): 
             <Box flexDirection="column" marginTop={1}>
               {results.map((note, index) => (
                 <SearchResultItem
-                  key={note.note.noteId}
+                  key={note.noteId}
                   note={note}
                   isSelected={index === selectedIndex}
                   query={query}
@@ -80,7 +81,7 @@ function SearchResultItem({ note, isSelected, query }: SearchResultItemProps): J
       
       <Box marginLeft={2}>
         <Text dimColor>
-          ID: {note.note.noteId} | Type: {note.type}
+          ID: {note.noteId} | Type: {note.type}
         </Text>
       </Box>
       

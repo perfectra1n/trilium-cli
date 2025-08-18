@@ -5,6 +5,8 @@
  * security validation, and performance constraints enforcement.
  */
 
+import { isDefined, getFirstElement } from './type-guards.js';
+
 /**
  * Resource types that can be monitored and limited
  */
@@ -12,10 +14,9 @@ export enum ResourceType {
   Memory = 'memory',
   FileSize = 'fileSize',
   ProcessingTime = 'processingTime',
-  NetworkBandwidth = 'networkBandwidth',
   ConcurrentConnections = 'concurrentConnections',
   CacheSize = 'cacheSize',
-  QueueSize = 'queueSize'
+  QueueSize = 'queueSize',
 }
 
 /**
@@ -475,6 +476,7 @@ export class ResourceLimitsManager {
     
     // File name validation
     if (data.fileName) {
+      // eslint-disable-next-line no-control-regex
       const invalidChars = /[<>:"|?*\x00-\x1f]/;
       if (invalidChars.test(data.fileName)) {
         errors.push('File name contains invalid characters');
@@ -501,10 +503,15 @@ export class ResourceLimitsManager {
         'application/pdf'
       ];
       
-      const isAllowed = allowedMimeTypes.some(allowed => 
-        data.mimeType!.startsWith(allowed.split('/')[0]) || 
-        allowedMimeTypes.includes(data.mimeType!)
-      );
+      const isAllowed = allowedMimeTypes.some(allowed => {
+        if (!isDefined(data.mimeType)) return false;
+        const mimePrefix = allowed.split('/');
+        if (mimePrefix.length > 0) {
+          const prefix = getFirstElement(mimePrefix, 'MIME type prefix not found');
+          return data.mimeType.startsWith(prefix) || allowedMimeTypes.includes(data.mimeType);
+        }
+        return allowedMimeTypes.includes(data.mimeType);
+      });
       
       if (!isAllowed) {
         warnings.push(`Uncommon MIME type: ${data.mimeType}`);

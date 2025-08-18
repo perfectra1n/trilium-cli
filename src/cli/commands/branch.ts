@@ -1,17 +1,17 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   BranchCreateOptions,
   BranchListOptions,
   BranchUpdateOptions,
   BranchDeleteOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up branch management commands

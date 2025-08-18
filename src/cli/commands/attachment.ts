@@ -1,20 +1,22 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { createWriteStream, existsSync, statSync } from 'fs';
 import { basename, resolve } from 'path';
 
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   AttachmentUploadOptions,
   AttachmentDownloadOptions,
   AttachmentListOptions,
   AttachmentInfoOptions,
   AttachmentDeleteOptions,
+  BaseCommandOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up attachment management commands
@@ -85,15 +87,20 @@ export function setupAttachmentCommands(program: Command): void {
     .description('Download attachment')
     .argument('<attachment-id>', 'attachment ID')
     .option('-o, --output <file>', 'output file path')
-    .action(async (attachmentId: string, options: AttachmentDownloadOptions & { output?: string }) => {
+    .action(async (attachmentId: string, cmdOptions: any) => {
+      const options: AttachmentDownloadOptions = {
+        ...cmdOptions,
+        attachmentId,
+        outputFile: cmdOptions.output as string | undefined
+      };
       const logger = createLogger(options.verbose);
       
       try {
-        const client = await createTriliumClient(options);
+        const client = await createTriliumClient({...options, output: cmdOptions.output || 'json'} as BaseCommandOptions);
         
         // Get attachment info first
         const attachment = await client.getAttachment(attachmentId);
-        const outputPath = options.output || attachment.title || `attachment_${attachmentId}`;
+        const outputPath = options.outputFile || attachment.title || `attachment_${attachmentId}`;
         
         logger.info(`Downloading attachment to ${outputPath}...`);
         
@@ -103,11 +110,13 @@ export function setupAttachmentCommands(program: Command): void {
         const writeStream = createWriteStream(outputPath);
         if (typeof content === 'string') {
           writeStream.write(content);
-        } else if (content instanceof Buffer) {
+        } else if (Buffer.isBuffer(content)) {
           writeStream.write(content);
-        } else {
+        } else if (content && typeof content === 'object' && 'pipe' in content) {
           // Handle stream
-          content.pipe(writeStream);
+          (content as any).pipe(writeStream);
+        } else {
+          writeStream.write(content);
         }
         
         writeStream.end();

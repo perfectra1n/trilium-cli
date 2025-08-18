@@ -4,6 +4,16 @@
 
 import { NetworkError, ApiError } from '../error.js';
 
+// Polyfill for environments without fetch
+const globalFetch = globalThis.fetch || (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires, no-undef
+    return require('node-fetch').default;
+  } catch {
+    throw new Error('fetch is not available. Please install node-fetch or use Node.js 18+');
+  }
+})();
+
 /**
  * Rate limiter for HTTP requests
  */
@@ -57,7 +67,8 @@ export class HttpClient {
   private rateLimiter?: RateLimiter;
 
   constructor(config: HttpClientConfig) {
-    this.baseUrl = config.baseUrl;
+    // Ensure baseUrl has trailing slash for proper URL joining
+    this.baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
     this.headers = config.headers || {};
     this.timeout = config.timeout || 30000;
     this.retries = config.retries || 3;
@@ -73,7 +84,8 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     if (options.searchParams) {
       Object.entries(options.searchParams).forEach(([key, value]) => {
         fullUrl.searchParams.set(key, String(value));
@@ -98,7 +110,8 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'POST',
       headers: {
@@ -121,7 +134,8 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'PUT',
       headers: {
@@ -144,7 +158,8 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'PATCH',
       headers: {
@@ -164,7 +179,8 @@ export class HttpClient {
   async delete<T = unknown>(url: string): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'DELETE',
       headers: this.headers,
@@ -175,12 +191,30 @@ export class HttpClient {
   }
 
   /**
+   * Make a GET request that returns plain text
+   */
+  async getText(url: string): Promise<string> {
+    await this.rateLimiter?.waitIfNeeded();
+
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+
+    const response = await this.fetchWithRetry(fullUrl.toString(), {
+      method: 'GET',
+      headers: this.headers,
+    });
+
+    return await response.text();
+  }
+
+  /**
    * Download binary data
    */
   async download(url: string): Promise<Buffer> {
     await this.rateLimiter?.waitIfNeeded();
 
-    const fullUrl = new URL(url, this.baseUrl);
+    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
+    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'GET',
       headers: this.headers,
@@ -201,7 +235,7 @@ export class HttpClient {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
-        const response = await fetch(url, {
+        const response = await globalFetch(url, {
           ...options,
           signal: controller.signal,
         });

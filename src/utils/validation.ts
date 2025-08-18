@@ -7,6 +7,11 @@ import type { EntityId } from '../types/common.js';
  * Validate that a string is a valid entity ID
  */
 export function isValidEntityId(id: string): id is EntityId {
+  // Special case for Trilium system entities
+  if (id === 'root' || id === '_hidden' || id === 'none') {
+    return true;
+  }
+  // Regular entity IDs are 12+ alphanumeric characters
   return /^[a-zA-Z0-9_-]{12,}$/.test(id);
 }
 

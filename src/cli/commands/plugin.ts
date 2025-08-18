@@ -1,8 +1,14 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { existsSync, statSync } from 'fs';
 import { resolve, basename } from 'path';
 
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   PluginListOptions,
   PluginInstallOptions,
@@ -12,11 +18,6 @@ import type {
   PluginInfoOptions,
   PluginRunOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up plugin management commands
@@ -38,9 +39,7 @@ export function setupPluginCommands(program: Command): void {
       
       try {
         const client = await createTriliumClient(options);
-        const plugins = await client.getPlugins({
-          capability: options.capability
-        });
+        const plugins = await client.getPlugins();
         
         const columns = options.detailed 
           ? ['name', 'version', 'status', 'capabilities', 'author', 'description']
@@ -120,10 +119,8 @@ export function setupPluginCommands(program: Command): void {
         
         logger.info(`Installing plugin from ${source}...`);
         
-        const result = await client.installPlugin({
-          source: pluginSource,
-          trust: options.trust || false
-        });
+        const pluginId = typeof pluginSource === 'object' ? pluginSource.name : pluginSource;
+        const result = await client.installPlugin(pluginId);
         
         const output = formatOutput([result], options.output, [
           'name', 'version', 'status', 'installed', 'warnings'
@@ -135,7 +132,7 @@ export function setupPluginCommands(program: Command): void {
             logger.info(chalk.green(`Plugin "${result.name}" installed successfully`));
             if (result.warnings && result.warnings.length > 0) {
               logger.warn(chalk.yellow('Warnings:'));
-              result.warnings.forEach(warning => logger.warn(`  - ${warning}`));
+              result.warnings.forEach((warning: any) => logger.warn(`  - ${warning}`));
             }
           } else {
             logger.error(chalk.red(`Failed to install plugin: ${result.error}`));
@@ -277,7 +274,7 @@ export function setupPluginCommands(program: Command): void {
         
         if (options.output === 'table' && plugin.commands && plugin.commands.length > 0) {
           console.log(chalk.blue('\nAvailable Commands:'));
-          plugin.commands.forEach(cmd => {
+          plugin.commands.forEach((cmd: any) => {
             console.log(`  ${cmd.name}: ${cmd.description}`);
           });
         }
@@ -343,7 +340,7 @@ function extractNameFromUrl(url: string): string {
   let name = parts[parts.length - 1];
   
   // Remove common extensions
-  name = name.replace(/\.(zip|tar\.gz|tgz|git)$/i, '');
+  name = name?.replace(/\.(zip|tar\.gz|tgz|git)$/i, '') ?? '';
   
   return name || 'unknown-plugin';
 }

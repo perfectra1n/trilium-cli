@@ -7,8 +7,8 @@
 
 import type { 
   EntityId, 
-  Note, 
-  SearchResult, 
+  Note,
+  NoteWithContent, 
   EnhancedSearchResult, 
   SearchOptions, 
   TextHighlight, 
@@ -153,29 +153,35 @@ export function parseSearchQuery(query: string): ParsedSearchQuery {
   let match: RegExpExecArray | null;
   SEARCH_PATTERNS.QUOTED.lastIndex = 0;
   while ((match = SEARCH_PATTERNS.QUOTED.exec(query)) !== null) {
-    exactPhrases.push(match[1]);
+    if (match[1]) {
+      exactPhrases.push(match[1]);
+    }
     workingQuery = workingQuery.replace(match[0], '');
   }
   
   // Extract tags
   SEARCH_PATTERNS.TAG.lastIndex = 0;
   while ((match = SEARCH_PATTERNS.TAG.exec(query)) !== null) {
-    tags.push({
-      name: match[1],
-      value: match[2] || undefined
-    });
+    if (match[1]) {
+      tags.push({
+        name: match[1],
+        value: match[2] || undefined
+      });
+    }
     workingQuery = workingQuery.replace(match[0], '');
   }
   
   // Extract field filters (excluding already processed tags)
   SEARCH_PATTERNS.FIELD.lastIndex = 0;
   while ((match = SEARCH_PATTERNS.FIELD.exec(workingQuery)) !== null) {
-    const field = match[1].toLowerCase();
-    if (field !== 'tag' && !tags.find(t => t.name === field)) {
-      fieldFilters.push({
-        field,
-        value: match[2]
-      });
+    if (match[1] && match[2]) {
+      const field = match[1].toLowerCase();
+      if (field !== 'tag' && !tags.find(t => t.name === field)) {
+        fieldFilters.push({
+          field,
+          value: match[2]
+        });
+      }
     }
     workingQuery = workingQuery.replace(match[0], '');
   }
@@ -183,7 +189,9 @@ export function parseSearchQuery(query: string): ParsedSearchQuery {
   // Extract boolean operators
   SEARCH_PATTERNS.BOOLEAN.lastIndex = 0;
   while ((match = SEARCH_PATTERNS.BOOLEAN.exec(query)) !== null) {
-    booleanOperators.push(match[1].toUpperCase());
+    if (match[1]) {
+      booleanOperators.push(match[1].toUpperCase());
+    }
   }
   
   // Clean up remaining terms
@@ -216,7 +224,7 @@ export function parseSearchQuery(query: string): ParsedSearchQuery {
  * Perform advanced search with ranking and highlighting
  */
 export function performAdvancedSearch(
-  notes: Note[],
+  notes: NoteWithContent[],
   query: string,
   options: Partial<SearchOptions> = {},
   config: Partial<AdvancedSearchConfig> = {}
@@ -248,7 +256,7 @@ export function performAdvancedSearch(
     
     if (matchResult.isMatch && matchResult.score > 0) {
       results.push({
-        ownerId: note.noteId,
+        noteId: note.noteId,
         title: note.title,
         path: generateNotePath(note),
         score: matchResult.score,
@@ -276,15 +284,15 @@ export function performAdvancedSearch(
  * Perform fuzzy search with Levenshtein distance
  */
 export function performFuzzySearch(
-  notes: Note[],
+  notes: NoteWithContent[],
   query: string,
   maxDistance = FUZZY_CONFIG.maxDistance
-): Array<{ note: Note; distance: number; score: number }> {
+): Array<{ note: NoteWithContent; distance: number; score: number }> {
   if (!query || query.length < FUZZY_CONFIG.minLength) {
     return [];
   }
   
-  const results: Array<{ note: Note; distance: number; score: number }> = [];
+  const results: Array<{ note: NoteWithContent; distance: number; score: number }> = [];
   const queryLower = query.toLowerCase();
   
   for (const note of notes) {
@@ -349,6 +357,8 @@ export function highlightSearchTerms(
   regex.lastIndex = 0;
   while ((match = regex.exec(text)) !== null) {
     const matchText = match[1];
+    if (!matchText) continue;
+    
     const start = match.index;
     const end = start + matchText.length;
     
@@ -393,6 +403,8 @@ export function extractHighlightedSnippets(
   // Find lines containing search terms
   for (let lineNumber = 0; lineNumber < lines.length && snippets.length < maxSnippets; lineNumber++) {
     const line = lines[lineNumber];
+    if (!line) continue;
+    
     const hasMatch = searchTerms.some(term => 
       line.toLowerCase().includes(term.toLowerCase())
     );
@@ -425,7 +437,7 @@ export function extractHighlightedSnippets(
  * Build search suggestions based on note content
  */
 export function buildSearchSuggestions(
-  notes: Note[],
+  notes: NoteWithContent[],
   partialQuery: string,
   maxSuggestions = 10
 ): string[] {
@@ -454,7 +466,7 @@ export function buildSearchSuggestions(
         .split(/\s+/)
         .slice(0, 100); // Limit for performance
         
-      contentWords.forEach(word => {
+      contentWords.forEach((word: string) => {
         const cleaned = word.replace(/[^\w]/g, '');
         if (cleaned.length >= 3) {
           words.add(cleaned);
@@ -511,7 +523,10 @@ export function getSearchStatistics(results: EnhancedSearchResult[]): {
   
   for (const score of scores) {
     const bucketIndex = Math.min(Math.floor(score * 5), 4);
-    buckets[bucketIndex].count++;
+    const bucket = buckets[bucketIndex];
+    if (bucket) {
+      bucket.count++;
+    }
   }
   
   return {
@@ -528,7 +543,7 @@ export function getSearchStatistics(results: EnhancedSearchResult[]): {
  * Match a note against parsed search query
  */
 function matchNote(
-  note: Note,
+  note: NoteWithContent,
   query: ParsedSearchQuery,
   options: Partial<SearchOptions>,
   config: AdvancedSearchConfig
@@ -627,25 +642,32 @@ function calculateLevenshteinDistance(str1: string, str2: string): number {
   }
   
   for (let j = 0; j <= str1.length; j++) {
-    matrix[0][j] = j;
+    if (matrix[0]) {
+      matrix[0][j] = j;
+    }
   }
   
   // Fill matrix
   for (let i = 1; i <= str2.length; i++) {
     for (let j = 1; j <= str1.length; j++) {
+      const currentRow = matrix[i];
+      const prevRow = matrix[i - 1];
+      if (!currentRow || !prevRow) continue;
+      
       if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
+        currentRow[j] = prevRow[j - 1] ?? 0;
       } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          matrix[i][j - 1] + 1,     // insertion
-          matrix[i - 1][j] + 1      // deletion
+        currentRow[j] = Math.min(
+          (prevRow[j - 1] ?? 0) + 1, // substitution
+          (currentRow[j - 1] ?? 0) + 1,     // insertion
+          (prevRow[j] ?? 0) + 1      // deletion
         );
       }
     }
   }
   
-  return matrix[str2.length][str1.length];
+  const finalRow = matrix[str2.length];
+  return finalRow?.[str1.length] ?? str1.length;
 }
 
 /**

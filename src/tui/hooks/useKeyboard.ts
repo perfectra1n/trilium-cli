@@ -4,7 +4,9 @@
 
 import { useInput } from 'ink';
 import { useCallback } from 'react';
-import { InputMode, ViewMode, SplitPane } from '../types/index.js';
+
+import type { ViewMode, SplitPane } from '../types/index.js';
+import { InputMode } from '../types/index.js';
 
 export interface KeyboardHandlers {
   // Navigation

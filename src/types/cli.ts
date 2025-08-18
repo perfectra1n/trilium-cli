@@ -96,10 +96,11 @@ export interface NoteListOptions extends BaseCommandOptions {
   tree?: boolean;
   depth?: number;
 }
-export interface NoteExportOptions extends BaseCommandOptions {
+export interface NoteExportOptions extends Omit<BaseCommandOptions, 'output'> {
   ownerId: string;
   format?: string;
-  output?: string;
+  output?: OutputFormat;
+  outputFile?: string;
 }
 export interface NoteImportOptions extends BaseCommandOptions {
   file: string;
@@ -175,9 +176,10 @@ export interface AttachmentUploadOptions extends BaseCommandOptions {
   file: string;
   title?: string;
 }
-export interface AttachmentDownloadOptions extends BaseCommandOptions {
+export interface AttachmentDownloadOptions extends Omit<BaseCommandOptions, 'output'> {
   attachmentId: string;
-  output?: string;
+  output?: OutputFormat;
+  outputFile?: string;
 }
 export interface AttachmentListOptions extends BaseCommandOptions {
   ownerId: string;
@@ -381,7 +383,7 @@ export interface PluginRunOptions extends BaseCommandOptions {
 }
 
 // Completion Command Options
-export interface CompletionGenerateOptions extends BaseCommandOptions {
+export interface CompletionGenerateOptions extends Omit<BaseCommandOptions, 'output'> {
   shell: string;
   output?: string;
 }

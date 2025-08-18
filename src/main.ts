@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
-import chalk from 'chalk';
 import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+import chalk from 'chalk';
+import { Command } from 'commander';
 
 // Import types and utilities
-import type { GlobalOptions } from './cli/types.js';
 import { setupCommands } from './cli/index.js';
+import type { GlobalOptions } from './cli/types.js';
 import { Config } from './config/index.js';
+import type {
+  Result} from './error.js';
 import { 
   TriliumError, 
   ConfigError, 
   ErrorContext, 
   EnhancedError,
   InvalidInputError,
-  Result,
+  TimeoutError,
   Ok,
   Err,
   tryCatch
 } from './error.js';
-import { createLogger } from './utils/logger.js';
 import type { LogLevel } from './types/common.js';
+import { createLogger } from './utils/logger.js';
 import { validateUrl } from './utils/validation.js';
 
 // Get package info from package.json with proper path resolution
@@ -54,7 +57,7 @@ function resolvePackageJsonPath(): string {
   }
   
   // Fallback: return the most likely path
-  return possiblePaths[0];
+  return possiblePaths[0] as string;
 }
 
 let packageInfo: { name: string; version: string; description: string };
@@ -114,15 +117,10 @@ export class Application {
       
       return this.config;
     }, (error) => {
-      const context = new ErrorContext()
-        .withOperationContext('Application initialization')
-        .withSuggestion('Check your configuration and environment')
-        .withHelpTopic('setup');
-      
       if (error instanceof TriliumError) {
-        return new EnhancedError(error, context);
+        return error;
       }
-      return new EnhancedError(TriliumError.fromUnknown(error, 'Failed to initialize application'), context);
+      return TriliumError.fromUnknown(error, 'Failed to initialize application');
     });
   }
 
@@ -434,57 +432,6 @@ export async function createCLIApplication(): Promise<Command> {
   // Set up all commands
   await setupCommands(program);
 
-  // Add default TUI command when no subcommand is provided
-  program
-    .command('tui', { isDefault: true })
-    .description('Launch interactive TUI mode (default command)')
-    .option('--theme <theme>', 'TUI theme (default, dark, light)', 'default')
-    .option('--refresh <ms>', 'Refresh interval in milliseconds', (val) => parseInt(val, 10), 5000)
-    .action(async (cmdOptions: any, cmd: Command) => {
-      const globalOptions = cmd.parent?.opts() as GlobalOptions;
-      const options = { ...globalOptions, ...cmdOptions };
-      
-      try {
-        // Initialize application
-        const configResult = await app.initialize(options);
-        if (!configResult.success) {
-          handleApplicationError(configResult.error, app.getLogger());
-          return;
-        }
-
-        // Import and run TUI with proper error handling
-        let runTUI: (config: Config, options: any) => Promise<void>;
-        try {
-          const tuiModule = await import('./tui/index.js');
-          if (!tuiModule.runTUI) {
-            throw new TriliumError('TUI module does not export runTUI function');
-          }
-          runTUI = tuiModule.runTUI;
-        } catch (importError) {
-          const context = new ErrorContext()
-            .withCode('TUI_MODULE_MISSING')
-            .withOperationContext('Loading TUI module')
-            .withSuggestion('Ensure TUI components are properly built')
-            .withSuggestion('Try rebuilding the project with npm run build')
-            .withSuggestion('Use CLI commands instead of TUI mode')
-            .withHelpTopic('installation');
-          
-          const error = new TriliumError('TUI module is not available');
-          throw error.withContext(context);
-        }
-        
-        const tuiOptions = {
-          ...options,
-          theme: options.theme || 'default',
-          refreshInterval: options.refresh || 5000
-        };
-        
-        await runTUI(configResult.data, tuiOptions);
-        
-      } catch (error) {
-        handleApplicationError(error, app.getLogger());
-      }
-    });
 
   // Global error handling for commands
   program.hook('preAction', async (thisCommand, actionCommand) => {
@@ -525,7 +472,7 @@ export async function createCLIApplication(): Promise<Command> {
       
       // Get available commands for suggestions
       const availableCommands = program.commands.map(cmd => cmd.name());
-      const suggestions = TriliumError.suggestSimilarCommands(unknownCommand, availableCommands);
+      const suggestions = TriliumError.suggestSimilarCommands(unknownCommand || 'unknown', availableCommands);
       
       const context = new ErrorContext()
         .withCode('UNKNOWN_COMMAND')

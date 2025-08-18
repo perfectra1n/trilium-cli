@@ -1,7 +1,17 @@
-import { join, relative, dirname, basename, resolve } from 'path';
 import { readFile, writeFile, stat, access, constants } from 'fs/promises';
+import { join, relative, dirname, basename, resolve } from 'path';
 
 import type { TriliumClient } from '../../api/client.js';
+import { getElementAt } from '../../utils/type-guards.js';
+import {
+  safeGitExecSync,
+  safeGitExecAsync,
+  validateDirectoryPath,
+  sanitizeGitBranch,
+  sanitizeCommitMessage,
+  sanitizeGitUser,
+  sanitizeGitEmail,
+} from '../secure-exec.js';
 import type {
   SyncHandler,
   GitConfig,
@@ -29,15 +39,6 @@ import {
   sanitizeFileName,
   fileExists,
 } from '../utils.js';
-import {
-  safeGitExecSync,
-  safeGitExecAsync,
-  validateDirectoryPath,
-  sanitizeGitBranch,
-  sanitizeCommitMessage,
-  sanitizeGitUser,
-  sanitizeGitEmail,
-} from '../secure-exec.js';
 
 /**
  * Git repository information
@@ -310,10 +311,10 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
         .map(line => {
           const [hash, author, dateStr, message] = line.split('|');
           return {
-            hash,
-            author,
-            date: new Date(dateStr),
-            message,
+            hash: hash || '',
+            author: author || '',
+            date: new Date(dateStr || Date.now()),
+            message: message || '',
             files: [], // Would need separate command to get files per commit
           };
         });
@@ -430,8 +431,10 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      if (!file) continue;
+      
       const progressPercent = 40 + Math.floor((i / files.length) * 40);
-      await progress.progress(progressPercent, `Importing: ${file.name}`);
+      await progress.progress(progressPercent, `Importing: ${file?.name || 'file'}`);
 
       try {
         const noteId = await this.importFileToTrilium(file, config, context);
@@ -442,8 +445,8 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
           skippedFiles.push(file.path);
         }
       } catch (error) {
-        console.warn(`Warning: Failed to import ${file.path}:`, error);
-        skippedFiles.push(file.path);
+        console.warn(`Warning: Failed to import ${file?.path || 'file'}:`, error);
+        skippedFiles.push(file?.path || '');
       }
     }
 
@@ -468,7 +471,7 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
     const noteIds = await this.getNoteIdsForExport(config);
 
     for (let i = 0; i < noteIds.length; i++) {
-      const noteId = noteIds[i];
+      const noteId = getElementAt(noteIds, i, `Note ID not found at index ${i}`);
       const progressPercent = 40 + Math.floor((i / noteIds.length) * 40);
       await progress.progress(progressPercent, `Exporting note: ${noteId}`);
 
@@ -533,7 +536,7 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
   ): Promise<string | null> {
     try {
       // Check if file should be skipped
-      if (config.ignorePatterns.some(pattern => file.path.match(pattern))) {
+      if (config.excludePatterns.some(pattern => file.path.match(pattern))) {
         return null;
       }
 
@@ -557,8 +560,8 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
       const noteData = {
         title,
         content: contentInfo.content || content,
-        type: 'text',
-        mime: 'text/html',
+        type: 'text' as const,
+        mime: 'text/html' as const,
         attributes: [
           { type: 'label', name: 'source', value: 'git' },
           { type: 'label', name: 'git-path', value: file.path },
@@ -570,10 +573,11 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
         await this.client.updateNote(existingNoteId, noteData);
         return existingNoteId;
       } else {
-        return await this.client.createNote({
+        const result = await this.client.createNote({
           ...noteData,
           parentNoteId: 'root', // TODO: Support folder structure
         });
+        return result.note.noteId;
       }
 
     } catch (error) {
@@ -594,9 +598,9 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
 
     try {
       // Get note data
-      const note = await this.client.getNote(noteId);
+      const note = await this.client.getNote(ownerId);
       if (!note) {
-        throw new Error(`Note not found: ${noteId}`);
+        throw new Error(`Note not found: ${ownerId}`);
       }
 
       // Determine file path
@@ -604,7 +608,7 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
       const filePath = join(config.repositoryPath, fileName);
 
       // Get original git path if available
-      const attributes = await this.client.getNoteAttributes(noteId);
+      const attributes = await this.client.getNoteAttributes(ownerId);
       const originalPath = attributes.find(attr => attr.name === 'git-path')?.value;
       
       const targetPath = originalPath 
@@ -621,7 +625,7 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
       exportedFiles.push(relative(config.repositoryPath, targetPath));
 
       // Export attachments
-      const attachments = await this.client.getNoteAttachments(noteId);
+      const attachments = await this.client.getNoteAttachments(ownerId);
       for (const attachment of attachments) {
         const attachmentPath = join(
           config.repositoryPath,
@@ -641,9 +645,9 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
 
     } catch (error) {
       throw new ImportExportError(
-        `Failed to export note to git: ${noteId}`,
+        `Failed to export note to git: ${ownerId}`,
         'NOTE_EXPORT_ERROR',
-        { noteId, error }
+        { noteId: ownerId, error }
       );
     }
   }
@@ -759,7 +763,10 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
   private async findExistingNoteByPath(gitPath: string, config: GitConfig): Promise<string | null> {
     try {
       const searchResults = await this.client.searchNotes(`#git-path = "${gitPath}"`);
-      return searchResults.length > 0 ? searchResults[0].noteId : null;
+      if (searchResults && searchResults.length > 0 && searchResults[0]) {
+        return searchResults[0].noteId;
+      }
+      return null;
     } catch (error) {
       return null;
     }

@@ -112,8 +112,8 @@ export interface UpdateNoteDef {
  */
 export interface Branch {
   branchId: EntityId;
-  ownerId: EntityId; // read-only
-  parentNoteId: EntityId; // read-only
+  noteId: EntityId; // read-only - identifies the child note
+  parentNoteId: EntityId; // read-only - identifies the parent note
   prefix?: string;
   notePosition: number;
   isExpanded: boolean;

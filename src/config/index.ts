@@ -1,10 +1,12 @@
-import Conf from 'conf';
 import { homedir } from 'os';
 import path from 'path';
+
+import Conf from 'conf';
 
 import { ConfigError } from '../error.js';
 import type { ConfigData, Profile } from '../types/config.js';
 import { DEFAULT_CONFIG } from '../types/config.js';
+import { isValidArray, getFirstElement } from '../utils/type-guards.js';
 import { validateUrl, validateEntityId } from '../utils/validation.js';
 
 /**
@@ -60,10 +62,10 @@ export class Config {
     const profileName = this.data.currentProfile;
     if (!profileName) {
       // Return first profile or throw if none exists
-      if (this.data.profiles.length === 0) {
+      if (!isValidArray(this.data.profiles)) {
         throw new ConfigError('No profiles configured. Please add a profile first.');
       }
-      return this.data.profiles[0]!;
+      return getFirstElement(this.data.profiles, 'No profiles configured. Please add a profile first.');
     }
 
     const profile = this.data.profiles.find(p => p.name === profileName);
@@ -106,7 +108,7 @@ export class Config {
     }
 
     // Set as current profile if it's the first one or marked as default
-    if (this.data.profiles.length === 1 || profile.default) {
+    if (this.data.profiles.length === 1 || profile.isDefault) {
       this.data.currentProfile = profile.name;
     }
   }
@@ -124,9 +126,12 @@ export class Config {
 
     // Update current profile if needed
     if (this.data.currentProfile === name) {
-      this.data.currentProfile = this.data.profiles.length > 0 
-        ? this.data.profiles[0]!.name 
-        : undefined;
+      if (isValidArray(this.data.profiles)) {
+        const firstProfile = getFirstElement(this.data.profiles, 'No profiles available after removal');
+        this.data.currentProfile = firstProfile.name;
+      } else {
+        this.data.currentProfile = undefined;
+      }
     }
   }
 

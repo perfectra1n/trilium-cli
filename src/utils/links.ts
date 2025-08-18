@@ -5,8 +5,8 @@
  * with performance optimizations and backlink tracking.
  */
 
-import type { EntityId, ParsedLink, LinkReference, LinkType } from '../types/api.js';
-import type { Note } from '../types/api.js';
+import type { EntityId, ParsedLink, LinkReference, Note, NoteWithContent } from '../types/api.js';
+import { LinkType } from '../types/api.js';
 
 /**
  * Wiki-style link patterns with optimized regex
@@ -74,6 +74,8 @@ export function parseLinks(content: string, noteId?: EntityId): ParsedLink[] {
   
   while ((match = LINK_PATTERNS.COMBINED.exec(content)) !== null) {
     const [fullMatch, target, displayText] = match;
+    if (!target) continue;
+    
     const startPos = match.index;
     const endPos = startPos + fullMatch.length;
     
@@ -132,7 +134,7 @@ export function parseLinksWithLineNumbers(content: string, noteId?: EntityId): A
 /**
  * Extract outgoing links from note content
  */
-export function getOutgoingLinks(note: Note): ParsedLink[] {
+export function getOutgoingLinks(note: NoteWithContent): ParsedLink[] {
   if (!note.content) {
     return [];
   }
@@ -146,7 +148,7 @@ export function getOutgoingLinks(note: Note): ParsedLink[] {
 export function findBacklinks(
   targetNoteId: EntityId,
   targetTitle: string,
-  notes: Note[]
+  notes: NoteWithContent[]
 ): LinkReference[] {
   const backlinks: LinkReference[] = [];
   
@@ -187,11 +189,11 @@ export function findBacklinks(
  * Validate broken links across a collection of notes
  */
 export function validateLinks(
-  notes: Note[],
+  notes: NoteWithContent[],
   progressCallback?: (progress: { current: number; total: number; message?: string }) => void
-): Array<{ note: Note; brokenLinks: ParsedLink[] }> {
-  const noteMap = new Map<EntityId, Note>();
-  const titleMap = new Map<string, Note>();
+): Array<{ note: NoteWithContent; brokenLinks: ParsedLink[] }> {
+  const noteMap = new Map<EntityId, NoteWithContent>();
+  const titleMap = new Map<string, NoteWithContent>();
   
   // Build lookup maps for efficient validation
   for (const note of notes) {
@@ -199,10 +201,14 @@ export function validateLinks(
     titleMap.set(note.title, note);
   }
   
-  const results: Array<{ note: Note; brokenLinks: ParsedLink[] }> = [];
+  const results: Array<{ note: NoteWithContent; brokenLinks: ParsedLink[] }> = [];
   
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i];
+    
+    if (!note) {
+      continue;
+    }
     
     if (progressCallback) {
       progressCallback({
@@ -234,7 +240,7 @@ export function validateLinks(
     }
     
     if (brokenLinks.length > 0) {
-      results.push({ note, brokenLinks });
+      results.push({ note: note as NoteWithContent, brokenLinks });
     }
   }
   
@@ -278,8 +284,8 @@ export function replaceLinkTargets(
  */
 export function convertLinkFormat(
   content: string,
-  noteMap: Map<EntityId, Note>,
-  titleMap: Map<string, Note>,
+  noteMap: Map<EntityId, NoteWithContent>,
+  titleMap: Map<string, NoteWithContent>,
   targetFormat: LinkType
 ): string {
   const links = parseLinks(content);
@@ -351,16 +357,16 @@ export function extractLinkContext(content: string, link: ParsedLink, contextCha
 /**
  * Get link statistics for a collection of notes
  */
-export function getLinkStatistics(notes: Note[]): {
+export function getLinkStatistics(notes: NoteWithContent[]): {
   totalLinks: number;
   uniqueTargets: number;
   brokenLinks: number;
   linkTypes: Record<LinkType, number>;
-  mostLinkedNotes: Array<{ ownerId: EntityId; title: string; backlinks: number }>;
+  mostLinkedNotes: Array<{ noteId: EntityId; title: string; backlinks: number }>;
 } {
   const linkCounts = new Map<string, number>();
-  const noteMap = new Map<EntityId, Note>();
-  const titleMap = new Map<string, Note>();
+  const noteMap = new Map<EntityId, NoteWithContent>();
+  const titleMap = new Map<string, NoteWithContent>();
   const linkTypes = { [LinkType.NoteId]: 0, [LinkType.NoteTitle]: 0 };
   
   let totalLinks = 0;
@@ -407,7 +413,7 @@ export function getLinkStatistics(notes: Note[]): {
     .map(([target, count]) => {
       const note = noteMap.get(target) || titleMap.get(target);
       return {
-        ownerId: note?.noteId || target,
+        noteId: note?.noteId || target,
         title: note?.title || target,
         backlinks: count
       };
@@ -471,7 +477,9 @@ function getLineOffsets(content: string, cacheKey?: EntityId): number[] {
     // Manage cache size
     if (lineOffsetCaches.size >= CACHE_CONFIG.MAX_CACHE_SIZE) {
       const oldestKey = lineOffsetCaches.keys().next().value;
-      lineOffsetCaches.delete(oldestKey);
+      if (oldestKey) {
+        lineOffsetCaches.delete(oldestKey);
+      }
     }
     
     lineOffsetCaches.set(cacheKey, {
@@ -487,17 +495,19 @@ function getLineOffsets(content: string, cacheKey?: EntityId): number[] {
 /**
  * Get line and column number from character position
  */
-function getLineAndColumn(notePosition: number, lineOffsets: number[]): { lineNumber: number; columnNumber: number } {
+function getLineAndColumn(position: number, lineOffsets: number[]): { lineNumber: number; columnNumber: number } {
   let lineNumber = 1;
   
   for (let i = 1; i < lineOffsets.length; i++) {
-    if (position < lineOffsets[i]) {
+    const offset = lineOffsets[i];
+    if (offset !== undefined && position < offset) {
       break;
     }
     lineNumber = i + 1;
   }
   
-  const columnNumber = position - lineOffsets[lineNumber - 1] + 1;
+  const baseOffset = lineOffsets[lineNumber - 1] ?? 0;
+  const columnNumber = position - baseOffset + 1;
   
   return { lineNumber, columnNumber };
 }

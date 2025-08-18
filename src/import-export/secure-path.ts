@@ -1,5 +1,6 @@
-import { resolve, normalize, isAbsolute, join, relative, dirname, basename } from 'path';
 import { stat, access, constants } from 'fs/promises';
+import { resolve, normalize, isAbsolute, join, relative, dirname, basename } from 'path';
+
 import { ImportExportError } from './types.js';
 
 /**
@@ -27,6 +28,7 @@ const DEFAULT_SECURITY_CONFIG: Required<PathSecurityConfig> = {
     /\.\./,           // Directory traversal
     /~[\\/]/,         // Home directory reference
     /^\//,            // Absolute paths when not expected
+    // eslint-disable-next-line no-control-regex
     /[\x00-\x1f]/,    // Control characters
     /[<>:"|?*]/,      // Windows invalid characters
     /^\./,            // Hidden files starting with .
@@ -291,6 +293,7 @@ export function sanitizeFileName(fileName: string): string {
 
   // Remove or replace dangerous characters
   const sanitized = fileName
+    // eslint-disable-next-line no-control-regex
     .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') // Replace invalid characters with underscore
     .replace(/^\.+|\.+$/g, '') // Remove leading and trailing dots
     .replace(/\s+/g, ' ') // Normalize whitespace

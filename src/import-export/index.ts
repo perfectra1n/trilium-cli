@@ -3,11 +3,16 @@
  */
 
 import { randomUUID } from 'crypto';
-import { resolve } from 'path';
 import { tmpdir } from 'os';
+import { resolve } from 'path';
 import { join } from 'path';
 
 import type { TriliumClient } from '../api/client.js';
+
+import { DirectoryImportHandler, DirectoryExportHandler } from './formats/directory.js';
+import { GitSyncHandler } from './formats/git.js';
+import { NotionImportHandler, NotionExportHandler } from './formats/notion.js';
+import { ObsidianImportHandler, ObsidianExportHandler } from './formats/obsidian.js';
 import type {
   ImportHandler,
   ExportHandler,
@@ -35,10 +40,6 @@ import {
 } from './types.js';
 
 // Import format handlers
-import { ObsidianImportHandler, ObsidianExportHandler } from './formats/obsidian.js';
-import { NotionImportHandler, NotionExportHandler } from './formats/notion.js';
-import { DirectoryImportHandler, DirectoryExportHandler } from './formats/directory.js';
-import { GitSyncHandler } from './formats/git.js';
 
 /**
  * Import/Export Manager - Central orchestrator for all import/export operations
@@ -79,8 +80,8 @@ export class ImportExportManager {
   private createOperationContext(format: FormatType, operation: OperationType): OperationContext {
     return {
       operationId: randomUUID(),
-      triliumUrl: this.client.baseUrl || 'http://localhost:8080',
-      apiToken: this.client.apiToken || '',
+      triliumUrl: this.client.getBaseUrl() || 'http://localhost:8080',
+      apiToken: this.client.getApiToken() || '',
       workingDirectory: process.cwd(),
       tempDirectory: join(tmpdir(), `trilium-${operation}-${format}-${Date.now()}`),
       logLevel: 'info',

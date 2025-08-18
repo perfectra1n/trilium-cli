@@ -1,5 +1,5 @@
-import { Table } from 'console-table-printer';
 import chalk from 'chalk';
+import { Table } from 'console-table-printer';
 
 import type { OutputFormat } from '../types/common.js';
 

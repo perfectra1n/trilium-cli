@@ -5,7 +5,7 @@
  * tag cloud generation, and relationship utilities.
  */
 
-import type { EntityId, Note, Attribute, TagInfo } from '../types/api.js';
+import type { EntityId, Note, NoteWithContent, Attribute, TagInfo } from '../types/api.js';
 
 /**
  * Tag parsing patterns
@@ -131,7 +131,10 @@ export function parseTagsFromContent(content: string): ParsedTag[] {
   while ((match = TAG_PATTERNS.HASHTAG_VALUE.exec(content)) !== null) {
     const fullName = match[1];
     const value = match[2];
-    const tagKey = `${fullName}:${value}`;
+    
+    if (!fullName) continue;
+    
+    const tagKey = `${fullName}:${value || ''}`;
     
     if (!seenTags.has(tagKey) && validateTagName(fullName)) {
       seenTags.add(tagKey);
@@ -152,6 +155,8 @@ export function parseTagsFromContent(content: string): ParsedTag[] {
   TAG_PATTERNS.HASHTAG.lastIndex = 0;
   while ((match = TAG_PATTERNS.HASHTAG.exec(content)) !== null) {
     const fullName = match[1];
+    
+    if (!fullName) continue;
     
     // Skip if already found with value
     if (!seenTags.has(fullName) && !seenTags.has(`${fullName}:`)) {
@@ -174,6 +179,9 @@ export function parseTagsFromContent(content: string): ParsedTag[] {
   TAG_PATTERNS.MENTION.lastIndex = 0;
   while ((match = TAG_PATTERNS.MENTION.exec(content)) !== null) {
     const fullName = match[1];
+    
+    if (!fullName) continue;
+    
     const mentionKey = `@${fullName}`;
     
     if (!seenTags.has(mentionKey) && validateTagName(fullName)) {
@@ -221,7 +229,7 @@ export function extractTagsFromAttributes(attributes: Attribute[]): ParsedTag[] 
 /**
  * Build tag hierarchy from a collection of notes
  */
-export function buildTagHierarchy(notes: Note[]): TagHierarchyNode[] {
+export function buildTagHierarchy(notes: NoteWithContent[]): TagHierarchyNode[] {
   const tagCounts = new Map<string, number>();
   const tagPaths = new Set<string>();
   
@@ -259,7 +267,7 @@ export function buildTagHierarchy(notes: Note[]): TagHierarchyNode[] {
     const count = tagCounts.get(path) || 0;
     
     const node: TagHierarchyNode = {
-      name: parts[parts.length - 1],
+      name: parts[parts.length - 1] || '',
       fullPath: path,
       count,
       children: [],
@@ -309,7 +317,7 @@ export function buildTagHierarchy(notes: Note[]): TagHierarchyNode[] {
 /**
  * Generate tag statistics
  */
-export function generateTagStatistics(notes: Note[]): TagStatistics[] {
+export function generateTagStatistics(notes: (Note & { content?: string })[]): TagStatistics[] {
   const tagStats = new Map<string, {
     count: number;
     noteIds: Set<EntityId>;
@@ -344,6 +352,8 @@ export function generateTagStatistics(notes: Note[]): TagStatistics[] {
         const tag1 = noteTags[i];
         const tag2 = noteTags[j];
         
+        if (!tag1 || !tag2) continue;
+        
         const stats1 = tagStats.get(tag1)!;
         const stats2 = tagStats.get(tag2)!;
         
@@ -372,7 +382,7 @@ export function generateTagStatistics(notes: Note[]): TagStatistics[] {
       .map(([tag, count]) => ({ tag, coOccurrence: count }));
     
     results.push({
-      name: hierarchy[hierarchy.length - 1],
+      name: hierarchy[hierarchy.length - 1] || '',
       fullPath: tagName,
       count: stats.count,
       noteIds: Array.from(stats.noteIds),
@@ -429,7 +439,7 @@ export function findTagRelationships(tagStats: TagStatistics[]): TagRelationship
   const tagMap = new Map(tagStats.map(stat => [stat.fullPath, stat]));
   
   for (const stat of tagStats) {
-    const hierarchy = stat.fullPath.split('/');
+    const _hierarchy = stat.fullPath.split('/');
     
     // Parent relationships
     if (stat.parentTag) {

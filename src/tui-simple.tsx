@@ -4,8 +4,9 @@
  * Focus on basic functionality without complex features
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
+import React, { useState, useEffect, useCallback } from 'react';
+
 import { TriliumClient } from './api/client.js';
 import type { Note, NoteTreeItem } from './types/api.js';
 
@@ -234,7 +235,7 @@ function SimpleTui() {
             <Text bold>Notes ({state.notes.length}):</Text>
             <Box marginTop={1} flexDirection="column">
               {state.notes.map((note, index) => (
-                <Box key={note.note.noteId}>
+                <Box key={note.noteId}>
                   <Text color={index === state.selectedIndex ? 'yellow' : undefined}>
                     {index === state.selectedIndex ? '> ' : '  '}
                     {note.title}

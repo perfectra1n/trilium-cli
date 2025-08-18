@@ -2,8 +2,9 @@
  * InputModal component for various input modes (search, command, fuzzy search)
  */
 
-import React from 'react';
 import { Box, Text } from 'ink';
+import React from 'react';
+
 import { InputMode, type FuzzySearchResult } from '../types/index.js';
 
 interface InputModalProps {
@@ -19,18 +20,12 @@ export function InputModal({ mode, input, searchResults, selectedIndex = 0 }: In
   
   return (
     <Box 
-      position="absolute" 
-      top={3} 
-      left={2} 
-      right={2} 
-      bottom={3}
       flexDirection="column"
     >
       {/* Input box */}
       <Box 
         borderStyle="single" 
         borderColor="yellow" 
-        backgroundColor="black"
         paddingX={1}
       >
         <Text bold color="yellow">
@@ -41,9 +36,7 @@ export function InputModal({ mode, input, searchResults, selectedIndex = 0 }: In
       <Box 
         borderStyle="single" 
         borderColor="yellow" 
-        backgroundColor="black"
         paddingX={1}
-        borderTop={false}
       >
         <Text>
           {input || <Text dimColor>{placeholder}</Text>}
@@ -56,12 +49,10 @@ export function InputModal({ mode, input, searchResults, selectedIndex = 0 }: In
           flexGrow={1}
           borderStyle="single" 
           borderColor="white" 
-          backgroundColor="black"
-          borderTop={false}
           flexDirection="column"
           paddingX={1}
         >
-          <Box borderBottom={true} borderBottomColor="white" marginBottom={1}>
+          <Box marginBottom={1}>
             <Text bold>
               Results ({searchResults.length})
             </Text>
@@ -77,7 +68,7 @@ export function InputModal({ mode, input, searchResults, selectedIndex = 0 }: In
             ) : (
               searchResults.map((result, index) => (
                 <FuzzySearchResultItem
-                  key={result.item.note.note.noteId}
+                  key={result.item.note.noteId}
                   result={result}
                   isSelected={index === selectedIndex}
                 />
@@ -91,9 +82,7 @@ export function InputModal({ mode, input, searchResults, selectedIndex = 0 }: In
       <Box 
         borderStyle="single" 
         borderColor="gray" 
-        backgroundColor="black"
         paddingX={1}
-        borderTop={false}
       >
         <Text dimColor>
           {getInstructionText(mode)}
@@ -116,7 +105,6 @@ function FuzzySearchResultItem({ result, isSelected }: FuzzySearchResultItemProp
     <Box>
       <Text 
         color={textColor}
-        backgroundColor={backgroundColor}
         bold={isSelected}
       >
         {highlightFuzzyMatches(result.item.note.title, result.indices)}

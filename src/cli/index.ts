@@ -1,29 +1,31 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
 // Import command handlers
-import { setupConfigCommands } from './commands/config.js';
-import { setupNoteCommands } from './commands/note.js';
-import { setupSearchCommands } from './commands/search.js';
-import { setupProfileCommands } from './commands/profile.js';
-import { setupBranchCommands } from './commands/branch.js';
-import { setupAttributeCommands } from './commands/attribute.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../utils/cli.js';
+import { createLogger } from '../utils/logger.js';
+
 import { setupAttachmentCommands } from './commands/attachment.js';
+import { setupAttributeCommands } from './commands/attribute.js';
 import { setupBackupCommand } from './commands/backup.js';
+import { setupBranchCommands } from './commands/branch.js';
 import { setupCalendarCommand } from './commands/calendar.js';
-import { setupPipeCommand } from './commands/pipe.js';
+import { setupCompletionCommands } from './commands/completion.js';
+import { setupConfigCommands } from './commands/config.js';
+import { setupImportExportCommands } from './commands/import-export.js';
 import { setupLinkCommands } from './commands/link.js';
+import { setupNoteCommands } from './commands/note.js';
+import { setupPipeCommand } from './commands/pipe.js';
+import { setupPluginCommands } from './commands/plugin.js';
+import { setupProfileCommands } from './commands/profile.js';
+import { setupQuickCommand } from './commands/quick.js';
+import { setupSearchCommands } from './commands/search.js';
 import { setupTagCommands } from './commands/tag.js';
 import { setupTemplateCommands } from './commands/template.js';
-import { setupQuickCommand } from './commands/quick.js';
-import { setupImportExportCommands } from './commands/import-export.js';
-import { setupPluginCommands } from './commands/plugin.js';
-import { setupCompletionCommands } from './commands/completion.js';
 
 // Import utilities
 import type { BaseCommandOptions } from './types.js';
-import { createLogger } from '../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../utils/cli.js';
+
 
 /**
  * Set up all CLI commands

@@ -1,9 +1,15 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { writeFileSync, existsSync, mkdirSync } from 'fs';
-import { resolve, join } from 'path';
 import { homedir } from 'os';
+import { resolve, join } from 'path';
 
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   CompletionGenerateOptions,
   CompletionInstallOptions,
@@ -11,11 +17,6 @@ import type {
   CompletionCacheStatusOptions,
   CompletionCacheRefreshOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up completion commands
@@ -210,26 +211,30 @@ export function setupCompletionCommands(program: Command): void {
         let data: string[] = [];
         
         switch (completionType) {
-          case 'notes':
+          case 'notes': {
             const notes = await client.searchNotes('');
             data = notes.map(note => `${note.noteId}:${note.title}`);
             break;
-          case 'profiles':
+          }
+          case 'profiles': {
             const config = new Config();
             await config.load();
-            data = Object.keys(config.profiles);
+            data = config.getProfiles().map(p => p.name);
             break;
+          }
           case 'commands':
             data = getAllCommandNames();
             break;
-          case 'templates':
+          case 'templates': {
             const templates = await client.getTemplates();
-            data = templates.map(t => `${t.noteId}:${t.title}`);
+            data = templates.map(t => `${t.id}:${t.title}`);
             break;
-          case 'tags':
-            const tags = await client.getTags({});
+          }
+          case 'tags': {
+            const tags = await client.getTags();
             data = tags.map(t => t.name);
             break;
+          }
         }
         
         await saveCompletionCache(completionType, data);

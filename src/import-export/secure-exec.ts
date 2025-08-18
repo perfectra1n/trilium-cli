@@ -1,6 +1,7 @@
-import { execSync, spawn } from 'child_process';
-import { promisify } from 'util';
+import { execSync, spawn, type ChildProcess } from 'child_process';
 import { resolve, normalize, isAbsolute } from 'path';
+import { promisify } from 'util';
+
 import { ImportExportError } from './types.js';
 
 /**
@@ -10,7 +11,7 @@ import { ImportExportError } from './types.js';
 export interface ExecOptions {
   cwd?: string;
   timeout?: number;
-  encoding?: BufferEncoding;
+  encoding?: 'utf8' | 'ascii' | 'base64' | 'hex' | 'binary' | 'utf16le';
   maxBuffer?: number;
   allowedCommands?: string[];
 }
@@ -152,14 +153,13 @@ export function safeGitExecSync(
   const sanitizedCommand = sanitizedParts.join(' ');
 
   try {
-    return execSync(sanitizedCommand, {
+    const result = execSync(sanitizedCommand, {
       cwd: safeCwd,
       timeout,
-      encoding,
+      encoding: encoding as 'utf8' | 'ascii' | 'base64' | 'hex' | 'binary' | 'utf16le',
       maxBuffer,
-      // Prevent shell expansion
-      shell: false,
     });
+    return result.toString();
   } catch (error: any) {
     // Handle timeout errors specifically
     if (error.signal === 'SIGTERM' || error.code === 'ETIMEDOUT') {
@@ -221,11 +221,14 @@ export async function safeGitExecAsync(
   });
 
   const [cmd, ...args] = sanitizedParts;
+  if (!cmd) {
+    throw new ImportExportError('No command specified', 'EMPTY_COMMAND');
+  }
 
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
+    const child: ChildProcess = spawn(cmd, args, {
       cwd: safeCwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe'] as const,
     });
 
     let stdout = '';
@@ -317,6 +320,7 @@ export function sanitizeCommitMessage(message: string): string {
 
   // Remove control characters and limit length
   const sanitized = message
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x1f\x7f-\x9f]/g, '') // Remove control characters
     .replace(/[`$(){}[\]]/g, '') // Remove shell metacharacters
     .trim()

@@ -1,14 +1,15 @@
-import type { Command } from 'commander';
-import chalk from 'chalk';
 import { createWriteStream } from 'fs';
 import { resolve } from 'path';
 
-import type { BackupOptions } from '../types.js';
+import chalk from 'chalk';
+import type { Command } from 'commander';
+
 import { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
 import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import type { BackupOptions } from '../types.js';
 
 /**
  * Set up backup commands
@@ -31,29 +32,20 @@ export function setupBackupCommand(program: Command): void {
         logger.info(`Backup name: ${backupName}`);
         
         // Request backup from server
-        const backupResult = await client.createBackup(backupName);
+        const startTime = Date.now();
+        await client.createBackup(backupName);
+        const duration = Date.now() - startTime;
         
         if (options.output === 'json') {
           console.log(JSON.stringify({
             success: true,
             backupName,
-            ...backupResult
+            duration
           }, null, 2));
         } else {
           logger.info(chalk.green('Backup completed successfully'));
           logger.info(`Backup name: ${backupName}`);
-          
-          if (backupResult.backupFile) {
-            logger.info(`Backup file: ${backupResult.backupFile}`);
-          }
-          
-          if (backupResult.size) {
-            logger.info(`Backup size: ${formatFileSize(backupResult.size)}`);
-          }
-          
-          if (backupResult.duration) {
-            logger.info(`Duration: ${backupResult.duration}ms`);
-          }
+          logger.info(`Duration: ${duration}ms`);
         }
         
       } catch (error) {

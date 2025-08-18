@@ -1,6 +1,11 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
+import { TriliumClient } from '../../api/client.js';
+import { Config } from '../../config/index.js';
+import { TriliumError } from '../../error.js';
+import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
 import type {
   TagListOptions,
   TagSearchOptions,
@@ -9,11 +14,6 @@ import type {
   TagRemoveOptions,
   TagRenameOptions,
 } from '../types.js';
-import { TriliumClient } from '../../api/client.js';
-import { Config } from '../../config/index.js';
-import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
-import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
 
 /**
  * Set up tag management commands
@@ -36,10 +36,7 @@ export function setupTagCommands(program: Command): void {
       
       try {
         const client = await createTriliumClient(options);
-        const tags = await client.getTags({
-          pattern: options.pattern,
-          includeCount: options.counts
-        });
+        const tags = await client.getAllTags();
         
         let displayTags = tags;
         
@@ -77,8 +74,7 @@ export function setupTagCommands(program: Command): void {
         const client = await createTriliumClient(options);
         const notes = await client.searchNotesByTag({
           tagPattern: pattern,
-          includeChildren: options.includeChildren,
-          limit: options.limit
+          _includeChildren: options.includeChildren
         });
         
         const output = formatOutput(notes, options.output, [
@@ -255,21 +251,26 @@ export function setupTagCommands(program: Command): void {
             );
             
             if (tagAttribute) {
-              await client.updateAttribute(tagAttribute.attributeId, { 
-                name: cleanNewTag 
+              // Delete old attribute and create new one with different name
+              await client.deleteAttribute(tagAttribute.attributeId);
+              await client.createAttribute({
+                noteId: note.noteId,
+                type: 'label',
+                name: cleanNewTag,
+                value: tagAttribute.value || ''
               });
               results.push({ 
-                ownerId: note.noteId, 
+                noteId: note.noteId, 
                 title: note.title, 
                 success: true 
               });
             }
           } catch (error) {
             results.push({ 
-              ownerId: note.noteId, 
+              noteId: note.noteId, 
               title: note.title, 
               success: false, 
-              error: error.message 
+              error: (error as Error).message 
             });
           }
         }
@@ -343,9 +344,12 @@ function renderTagCloud(tags: any[]): string {
   
   for (const tag of tags) {
     const normalized = range > 0 ? (tag.count - minCount) / range : 0;
-    const size = sizes.find(s => normalized >= s.min) || sizes[sizes.length - 1];
+    const sizeEntry = sizes.find(s => normalized >= s.min);
+    const size = sizeEntry ?? sizes[sizes.length - 1];
     
-    cloud += size.color(tag.name) + ` (${tag.count}) `;
+    if (size) {
+      cloud += size.color(tag.name) + ` (${tag.count}) `;
+    }
   }
   
   return cloud;

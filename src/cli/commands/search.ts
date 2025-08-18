@@ -1,12 +1,12 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
-import type { SearchOptions } from '../types.js';
 import { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
 import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import type { SearchOptions } from '../types.js';
 
 /**
  * Set up search commands
@@ -42,7 +42,12 @@ export function setupSearchCommands(program: Command): void {
           highlight: options.highlight
         };
         
-        const results = await client.search(searchParams);
+        const results = await client.searchNotes(
+          query, 
+          options.fast ?? false, 
+          options.archived ?? false, 
+          options.limit ?? 50
+        );
         
         if (results.length === 0) {
           if (options.output === 'json') {
@@ -54,29 +59,22 @@ export function setupSearchCommands(program: Command): void {
         }
         
         // Format results for display
-        const displayResults = results.map((result, index) => ({
+        const displayResults = results.map((result: any, index: number) => ({
           index: index + 1,
-          ownerId: result.noteId,
+          noteId: result.noteId || result.ownerId,
           title: result.title,
-          type: result.type,
+          type: (result as any).type || 'text',
           score: result.score?.toFixed(2),
           path: result.path,
           ...(options.content && result.content && { 
             contentLength: `${result.content.length} chars`,
             preview: result.content.substring(0, 100) + (result.content.length > 100 ? '...' : '')
           }),
-          ...(result.context && { context: result.context }),
-          ...(result.highlightedSnippets && { 
-            snippets: result.highlightedSnippets.length,
-            highlights: result.highlightedSnippets.slice(0, 2)
-          })
         }));
         
         const columns = ['index', 'noteId', 'title', 'type'];
         if (results[0]?.score) columns.push('score');
         if (options.content) columns.push('contentLength', 'preview');
-        if (results[0]?.context) columns.push('context');
-        if (results[0]?.highlightedSnippets) columns.push('snippets');
         
         const output = formatOutput(displayResults, options.output, columns);
         console.log(output);
@@ -93,18 +91,6 @@ export function setupSearchCommands(program: Command): void {
             logger.info(chalk.dim(`  Context lines: ${options.context}`));
           }
           
-          // Show highlighted snippets if available and not in verbose mode
-          if (!options.verbose && results.some(r => r.highlightedSnippets)) {
-            console.log(chalk.blue('\nHighlighted matches:'));
-            results.slice(0, 3).forEach((result, i) => {
-              if (result.highlightedSnippets) {
-                console.log(chalk.dim(`${i + 1}. ${result.title}:`));
-                result.highlightedSnippets.slice(0, 2).forEach(snippet => {
-                  console.log(`   ${snippet}`);
-                });
-              }
-            });
-          }
         }
         
       } catch (error) {

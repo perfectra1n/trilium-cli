@@ -3,10 +3,11 @@ import { Table } from 'console-table-printer';
 
 import { TriliumClient } from '../api/client.js';
 import { Config } from '../config/index.js';
+import { ApiError, AuthError, ConfigError, ValidationError, TriliumError, ErrorContext } from '../error.js';
 import type { BaseCommandOptions, GlobalOptions } from '../types/cli.js';
 import type { OutputFormat } from '../types/common.js';
+
 import { createLogger } from './logger.js';
-import { ApiError, AuthError, ConfigError, ValidationError, TriliumError, ErrorContext } from '../error.js';
 
 /**
  * Type guard to check if an object has a specific property
@@ -35,7 +36,7 @@ export async function createTriliumClient(options: BaseCommandOptions): Promise<
 
     if (options.serverUrl && options.apiToken) {
       // Use provided options
-      serverUrl = options.serverUrl;
+      baseUrl = options.serverUrl;
       apiToken = options.apiToken;
       logger.debug('Using command-line provided credentials');
     } else {
@@ -57,7 +58,7 @@ export async function createTriliumClient(options: BaseCommandOptions): Promise<
         throw new ConfigError(`Profile '${profileName}' not found`);
       }
 
-      serverUrl = profile.serverUrl;
+      baseUrl = profile.serverUrl;
       apiToken = profile.apiToken || '';
       
       if (!apiToken) {
@@ -69,11 +70,11 @@ export async function createTriliumClient(options: BaseCommandOptions): Promise<
 
     // Create and configure client
     const client = new TriliumClient({
-      serverUrl,
+      baseUrl,
       apiToken,
       timeout: 30000,
       retries: 3,
-      debug: options.debug || false,
+      debugMode: options.debug || false,
     });
 
     // Test connection
@@ -233,8 +234,9 @@ export function handleCliError(error: unknown, logger?: ReturnType<typeof create
   if (error instanceof ValidationError) {
     log.error(chalk.red(`Validation Error: ${error.message}`));
     // Add type guard for details property
-    if (hasProperty(error, 'details') && error.details) {
-      log.debug(chalk.gray(`Details: ${JSON.stringify(error.details, null, 2)}`));
+    const errorObj = error as unknown as Record<string, unknown>;
+    if (hasProperty(errorObj, 'details') && (error as any).details) {
+      log.debug(chalk.gray(`Details: ${JSON.stringify((error as any).details, null, 2)}`));
     }
     process.exit(1);
   }
@@ -242,11 +244,12 @@ export function handleCliError(error: unknown, logger?: ReturnType<typeof create
   if (error instanceof ApiError) {
     log.error(chalk.red(`API Error: ${error.message}`));
     // Add type guards for optional properties
-    if (hasProperty(error, 'status') && error.status) {
-      log.debug(chalk.gray(`Status Code: ${error.status}`));
+    const errorObj = error as unknown as Record<string, unknown>;
+    if (hasProperty(errorObj, 'status') && (error as any).status) {
+      log.debug(chalk.gray(`Status Code: ${(error as any).status}`));
     }
-    if (hasProperty(error, 'response') && error.response) {
-      log.debug(chalk.gray(`Response: ${JSON.stringify(error.response, null, 2)}`));
+    if (hasProperty(errorObj, 'response') && (error as any).response) {
+      log.debug(chalk.gray(`Response: ${JSON.stringify((error as any).response, null, 2)}`));
     }
     process.exit(1);
   }
@@ -303,7 +306,7 @@ export function validateCommandOptions<T extends BaseCommandOptions>(
 ): T {
   // Validate required fields
   if (validationRules.required) {
-    validateRequiredOptions(options, validationRules.required);
+    validateRequiredOptions(options as Record<string, unknown>, validationRules.required);
   }
   
   // Validate string options

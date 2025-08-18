@@ -404,7 +404,7 @@ export function createProgressTracker(
           message: error instanceof Error ? error.message : error,
           data: {
             ...data,
-            error: error instanceof Error ? error.toJSON?.() || error.message : error,
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           },
           timestamp: new Date(),
         });

@@ -1,12 +1,12 @@
-import type { Command } from 'commander';
 import chalk from 'chalk';
+import type { Command } from 'commander';
 
-import type { CalendarOptions } from '../types.js';
 import { TriliumClient } from '../../api/client.js';
 import { Config } from '../../config/index.js';
 import { TriliumError } from '../../error.js';
-import { createLogger } from '../../utils/logger.js';
 import { formatOutput, handleCliError, createTriliumClient } from '../../utils/cli.js';
+import { createLogger } from '../../utils/logger.js';
+import type { CalendarOptions } from '../types.js';
 
 /**
  * Set up calendar commands
@@ -51,9 +51,7 @@ export function setupCalendarCommand(program: Command): void {
           
           if (options.output === 'table') {
             logger.info(chalk.green(`Found date note for ${date}`));
-            if (options.create && !dateNote.existed) {
-              logger.info(chalk.blue('Note was created as it didn\'t exist'));
-            }
+            // Note: The API always returns or creates the note, so we can't tell if it was newly created
           }
         } else {
           if (options.output === 'json') {

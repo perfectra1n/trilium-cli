@@ -6,6 +6,7 @@
  */
 
 import type { EntityId, Note, QuickCaptureRequest, NoteType, CreateNoteDef } from '../types/api.js';
+
 import { parseTagsFromContent } from './tags.js';
 
 /**
@@ -360,7 +361,7 @@ export function generateSmartTitle(content: string, maxLength = 100): string {
     
     // Markdown header
     const headerMatch = trimmed.match(/^#{1,6}\s+(.+)/);
-    if (headerMatch) {
+    if (headerMatch && headerMatch[1]) {
       return truncateText(headerMatch[1], maxLength);
     }
     

@@ -2,8 +2,9 @@
  * TreeView component for displaying the note tree
  */
 
-import React from 'react';
 import { Box, Text } from 'ink';
+import React from 'react';
+
 import type { NoteTreeItem } from '../../types/api.js';
 import type { BookmarkedNote } from '../types/index.js';
 
@@ -34,10 +35,10 @@ export function TreeView({ items, selectedIndex, bookmarkedNotes }: TreeViewProp
       <Box flexDirection="column" paddingX={1} flexGrow={1}>
         {items.map((item, index) => (
           <TreeItem
-            key={item.note.note.noteId}
+            key={item.note.noteId}
             item={item}
             isSelected={index === selectedIndex}
-            isBookmarked={bookmarkedNotes.some(b => b.noteId === item.note.noteId)}
+            isBookmarked={bookmarkedNotes.some(b => b.ownerId === item.note.noteId)}
           />
         ))}
       </Box>
