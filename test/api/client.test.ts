@@ -1,6 +1,22 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { TriliumClient } from '../../src/api/client.js';
-import type { Note, CreateNoteDef, UpdateNoteDef, Branch, Attribute } from '../../src/types/api.js';
+import type { 
+  Note, 
+  CreateNoteDef, 
+  UpdateNoteDef, 
+  Branch, 
+  Attribute,
+  SearchResult,
+  Attachment,
+  CreateAttachmentDef,
+  NoteWithContent,
+  AppInfo,
+  NoteTreeItem,
+  LinkReference,
+  TagInfo,
+  Template
+} from '../../src/types/api.js';
+import { ApiError, AuthError, ValidationError } from '../../src/error.js';
 
 describe('TriliumClient', () => {
   let client: TriliumClient;
@@ -440,6 +456,363 @@ describe('TriliumClient', () => {
     });
   });
 
+  describe('Error Handling', () => {
+    it('should handle network errors', async () => {
+      vi.spyOn(client as any, 'sendRequest').mockRejectedValue(
+        new Error('Network error')
+      );
+
+      await expect(client.getNote('test-id')).rejects.toThrow('Network error');
+    });
+
+    it('should handle authentication errors', async () => {
+      vi.spyOn(client as any, 'sendRequest').mockRejectedValue(
+        new AuthError('Invalid token')
+      );
+
+      await expect(client.getNote('test-id')).rejects.toThrow(AuthError);
+    });
+
+    it('should handle validation errors', async () => {
+      vi.spyOn(client as any, 'sendRequest').mockRejectedValue(
+        new ValidationError('Invalid input')
+      );
+
+      await expect(client.createNote({} as CreateNoteDef)).rejects.toThrow(ValidationError);
+    });
+
+    it('should retry on transient errors', async () => {
+      const sendRequestSpy = vi.spyOn(client as any, 'sendRequest');
+      sendRequestSpy
+        .mockRejectedValueOnce(new Error('Temporary error'))
+        .mockRejectedValueOnce(new Error('Temporary error'))
+        .mockResolvedValueOnce({ noteId: 'test-id', title: 'Test' });
+
+      const result = await client.getNote('test-id');
+      expect(result.noteId).toBe('test-id');
+      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('Attachments API', () => {
+    it('should get attachment metadata', async () => {
+      const mockAttachment: Attachment = {
+        attachmentId: 'att-id',
+        ownerId: 'note-id',
+        title: 'test.pdf',
+        mime: 'application/pdf',
+        size: 1024,
+        utcDateModified: '2024-01-01T00:00:00Z',
+      };
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockAttachment);
+
+      const attachment = await client.getAttachment('att-id');
+      expect(attachment.attachmentId).toBe('att-id');
+      expect(attachment.mime).toBe('application/pdf');
+    });
+
+    it('should create attachment', async () => {
+      const attachmentDef: CreateAttachmentDef = {
+        ownerId: 'note-id',
+        title: 'document.pdf',
+        mime: 'application/pdf',
+        content: Buffer.from('test content').toString('base64'),
+      };
+
+      const mockAttachment: Attachment = {
+        attachmentId: 'new-att-id',
+        ownerId: 'note-id',
+        title: 'document.pdf',
+        mime: 'application/pdf',
+        size: 12,
+        utcDateModified: '2024-01-01T00:00:00Z',
+      };
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockAttachment);
+
+      const attachment = await client.createAttachment(attachmentDef);
+      expect(attachment.attachmentId).toBe('new-att-id');
+    });
+
+    it('should delete attachment', async () => {
+      const deleteSpy = vi.spyOn(client as any, 'sendRequest').mockResolvedValue(undefined);
+
+      await client.deleteAttachment('att-id');
+      expect(deleteSpy).toHaveBeenCalledWith('DELETE', '/attachments/att-id');
+    });
+  });
+
+  describe('Advanced Search', () => {
+    it('should search with complex query', async () => {
+      const mockResults: SearchResult[] = [
+        { noteId: 'note1', title: 'Match 1', score: 0.95 },
+        { noteId: 'note2', title: 'Match 2', score: 0.85 },
+      ];
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue({
+        results: mockResults,
+      });
+
+      const results = await client.searchNotes(
+        '#tag1 AND @attributeName="value" AND ~"content phrase"',
+        false,
+        false,
+        50
+      );
+
+      expect(results).toHaveLength(2);
+      expect(results[0]?.score).toBe(0.95);
+    });
+
+    it('should handle regex search', async () => {
+      const searchSpy = vi.spyOn(client as any, 'sendRequest').mockResolvedValue({
+        results: [],
+      });
+
+      await client.searchNotes('~=".*pattern.*"', false, false, 10);
+      
+      expect(searchSpy).toHaveBeenCalledWith(
+        'GET',
+        expect.stringContaining('query=' + encodeURIComponent('~=".*pattern.*"'))
+      );
+    });
+  });
+
+  describe('Note Content Operations', () => {
+    it('should get note with content', async () => {
+      const mockNote: NoteWithContent = {
+        noteId: 'test-id',
+        title: 'Test Note',
+        type: 'text',
+        content: 'Note content here',
+        isProtected: false,
+        dateCreated: '2024-01-01',
+        dateModified: '2024-01-01',
+        utcDateCreated: '2024-01-01T00:00:00Z',
+        utcDateModified: '2024-01-01T00:00:00Z',
+      };
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockNote);
+
+      const note = await client.getNoteWithContent('test-id');
+      expect(note.content).toBe('Note content here');
+    });
+
+    it('should update note content', async () => {
+      const updateSpy = vi.spyOn(client as any, 'sendRequest').mockResolvedValue(undefined);
+
+      await client.updateNoteContent('test-id', 'Updated content');
+      
+      expect(updateSpy).toHaveBeenCalledWith(
+        'PUT',
+        '/notes/test-id/content',
+        'Updated content'
+      );
+    });
+
+    it('should handle binary content', async () => {
+      const binaryContent = Buffer.from([0x89, 0x50, 0x4E, 0x47]); // PNG header
+      const updateSpy = vi.spyOn(client as any, 'sendRequest').mockResolvedValue(undefined);
+
+      await client.updateNoteContent('image-note-id', binaryContent.toString('base64'));
+      
+      expect(updateSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('Templates API', () => {
+    it('should list templates', async () => {
+      const mockTemplates: Template[] = [
+        { noteId: 'tpl1', title: 'Template 1', type: 'text' },
+        { noteId: 'tpl2', title: 'Template 2', type: 'code' },
+      ];
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockTemplates);
+
+      const templates = await client.getTemplates();
+      expect(templates).toHaveLength(2);
+      expect(templates[0]?.title).toBe('Template 1');
+    });
+
+    it('should create note from template', async () => {
+      const mockResponse = {
+        note: {
+          noteId: 'new-note-id',
+          title: 'From Template',
+          type: 'text' as const,
+          isProtected: false,
+          dateCreated: '2024-01-01',
+          dateModified: '2024-01-01',
+          utcDateCreated: '2024-01-01T00:00:00Z',
+          utcDateModified: '2024-01-01T00:00:00Z',
+        },
+        branch: {
+          branchId: 'branch-id',
+          noteId: 'new-note-id',
+          parentNoteId: 'parent-id',
+          notePosition: 10,
+          isExpanded: false,
+          utcDateModified: '2024-01-01T00:00:00Z',
+        },
+      };
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockResponse);
+
+      const result = await client.createNoteFromTemplate('tpl1', 'parent-id', {
+        title: 'From Template',
+        content: 'Template content',
+      });
+
+      expect(result.note.noteId).toBe('new-note-id');
+    });
+  });
+
+  describe('Tags API', () => {
+    it('should get all tags', async () => {
+      const mockTags: TagInfo[] = [
+        { name: 'important', noteCount: 10 },
+        { name: 'todo', noteCount: 5 },
+      ];
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockTags);
+
+      const tags = await client.getTags();
+      expect(tags).toHaveLength(2);
+      expect(tags[0]?.name).toBe('important');
+      expect(tags[0]?.noteCount).toBe(10);
+    });
+
+    it('should add tag to note', async () => {
+      const attrSpy = vi.spyOn(client, 'createAttribute').mockResolvedValue({
+        attributeId: 'attr-id',
+        ownerId: 'note-id',
+        type: 'label',
+        name: 'tag',
+        value: 'important',
+        notePosition: 10,
+        isInheritable: false,
+        utcDateModified: '2024-01-01T00:00:00Z',
+      });
+
+      await client.addTag('note-id', 'important');
+      
+      expect(attrSpy).toHaveBeenCalledWith({
+        noteId: 'note-id',
+        type: 'label',
+        name: 'tag',
+        value: 'important',
+      });
+    });
+
+    it('should remove tag from note', async () => {
+      const attributes: Attribute[] = [
+        {
+          attributeId: 'attr1',
+          ownerId: 'note-id',
+          type: 'label',
+          name: 'tag',
+          value: 'important',
+          notePosition: 10,
+          isInheritable: false,
+          utcDateModified: '2024-01-01T00:00:00Z',
+        },
+      ];
+
+      vi.spyOn(client, 'getNoteAttributes').mockResolvedValue(attributes);
+      const deleteSpy = vi.spyOn(client, 'deleteAttribute').mockResolvedValue(undefined);
+
+      await client.removeTag('note-id', 'important');
+      
+      expect(deleteSpy).toHaveBeenCalledWith('attr1');
+    });
+  });
+
+  describe('App Info', () => {
+    it('should get app info', async () => {
+      const mockAppInfo: AppInfo = {
+        appVersion: '0.63.0',
+        dbVersion: 220,
+        dataDirectory: '/data',
+        buildDate: '2024-01-01',
+        buildRevision: 'abc123',
+        clipperProtocolVersion: '1.0',
+      };
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockAppInfo);
+
+      const appInfo = await client.getAppInfo();
+      expect(appInfo.appVersion).toBe('0.63.0');
+      expect(appInfo.dbVersion).toBe(220);
+    });
+  });
+
+  describe('Note Tree Operations', () => {
+    it('should get note tree', async () => {
+      const mockTree: NoteTreeItem[] = [
+        {
+          note: {
+            noteId: 'root',
+            title: 'Root',
+            type: 'text',
+            isProtected: false,
+            dateCreated: '2024-01-01',
+            dateModified: '2024-01-01',
+            utcDateCreated: '2024-01-01T00:00:00Z',
+            utcDateModified: '2024-01-01T00:00:00Z',
+          },
+          children: [
+            {
+              note: {
+                noteId: 'child1',
+                title: 'Child 1',
+                type: 'text',
+                isProtected: false,
+                dateCreated: '2024-01-01',
+                dateModified: '2024-01-01',
+                utcDateCreated: '2024-01-01T00:00:00Z',
+                utcDateModified: '2024-01-01T00:00:00Z',
+              },
+              children: [],
+            },
+          ],
+        },
+      ];
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockTree);
+
+      const tree = await client.getNoteTree('root', 2);
+      expect(tree).toHaveLength(1);
+      expect(tree[0]?.note.noteId).toBe('root');
+      expect(tree[0]?.children).toHaveLength(1);
+    });
+  });
+
+  describe('Link References', () => {
+    it('should get note links', async () => {
+      const mockLinks: LinkReference[] = [
+        {
+          linkId: 'link1',
+          sourceNoteId: 'note1',
+          targetNoteId: 'note2',
+          type: 'internal',
+        },
+        {
+          linkId: 'link2',
+          sourceNoteId: 'note1',
+          targetNoteId: 'note3',
+          type: 'internal',
+        },
+      ];
+
+      vi.spyOn(client as any, 'sendRequest').mockResolvedValue(mockLinks);
+
+      const links = await client.getNoteLinks('note1');
+      expect(links).toHaveLength(2);
+      expect(links[0]?.targetNoteId).toBe('note2');
+    });
+  });
+
   describe('Request Builder', () => {
     it('should create update note builder', () => {
       const builder = client.createUpdateNoteBuilder();
@@ -467,6 +840,84 @@ describe('TriliumClient', () => {
       expect(() => {
         builder.noteType('invalid' as any).build();
       }).toThrow('Invalid note type');
+    });
+  });
+
+  describe('Rate Limiting', () => {
+    it('should respect rate limits', async () => {
+      const rateLimitedClient = new TriliumClient({
+        baseUrl: 'http://localhost:8080',
+        apiToken: 'test-token',
+        rateLimitConfig: {
+          maxRequests: 2,
+          windowMs: 100,
+        },
+      });
+
+      const sendRequestSpy = vi.spyOn(rateLimitedClient as any, 'sendRequest')
+        .mockResolvedValue({ noteId: 'test-id' });
+
+      // Make rapid requests
+      const promises = [
+        rateLimitedClient.getNote('test1'),
+        rateLimitedClient.getNote('test2'),
+        rateLimitedClient.getNote('test3'), // This should be delayed
+      ];
+
+      const startTime = Date.now();
+      await Promise.all(promises);
+      const endTime = Date.now();
+
+      expect(endTime - startTime).toBeGreaterThanOrEqual(90); // Should have delay
+      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('Batch Operations', () => {
+    it('should batch create multiple notes', async () => {
+      const notes = [
+        { parentNoteId: 'parent', title: 'Note 1', type: 'text' as const, content: 'Content 1' },
+        { parentNoteId: 'parent', title: 'Note 2', type: 'text' as const, content: 'Content 2' },
+      ];
+
+      const createNoteSpy = vi.spyOn(client, 'createNote');
+      for (const note of notes) {
+        createNoteSpy.mockResolvedValueOnce({
+          note: { ...note, noteId: `id-${note.title}` } as Note,
+          branch: {} as Branch,
+        });
+      }
+
+      const results = await Promise.all(
+        notes.map(note => client.createNote(note))
+      );
+
+      expect(results).toHaveLength(2);
+      expect(createNoteSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should batch update multiple notes', async () => {
+      const updates = [
+        { noteId: 'note1', title: 'Updated 1' },
+        { noteId: 'note2', title: 'Updated 2' },
+      ];
+
+      const updateNoteSpy = vi.spyOn(client, 'updateNote');
+      for (const update of updates) {
+        updateNoteSpy.mockResolvedValueOnce({
+          noteId: update.noteId,
+          title: update.title,
+        } as Note);
+      }
+
+      const results = await Promise.all(
+        updates.map(({ noteId, title }) => 
+          client.updateNote(noteId, { title })
+        )
+      );
+
+      expect(results).toHaveLength(2);
+      expect(updateNoteSpy).toHaveBeenCalledTimes(2);
     });
   });
 });

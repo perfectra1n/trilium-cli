@@ -57,204 +57,472 @@ npm link
 
 ### Initial Setup
 ```bash
-# Configure connection to your Trilium server
-trilium profile create my-trilium --server-url http://localhost:8080 --api-token YOUR_API_TOKEN
+# Configure your Trilium server connection
+trilium config init
 
-# Test the connection
-trilium profile test
+# You'll be prompted for:
+# - Server URL (e.g., http://localhost:8080)
+# - ETAPI Token (from Trilium Settings → ETAPI)
+```
 
-# Start the TUI
+### Basic CLI Usage
+```bash
+# Search for notes
+trilium search "project ideas"
+
+# Create a new note
+trilium note create --title "Meeting Notes" --content "Discussion points..."
+
+# View a note
+trilium note get <noteId>
+
+# List all notes in tree view
+trilium note list --tree
+```
+
+### Launch the TUI
+```bash
+# Start the interactive terminal interface
 trilium tui
 
-# Or use CLI commands
-trilium note list
+# Or with a specific profile
+trilium tui --profile work
 ```
 
-### Basic Usage Examples
+## 🖥️ Command Line Interface (CLI)
 
-#### Note Management
+### Note Management
+
+#### Creating Notes
 ```bash
-# Create a new note
-trilium note create "My Note" --content "Hello, Trilium!" --parent root
+# Create a simple text note
+trilium note create --title "My Note" --content "Note content here"
 
-# List all notes
-trilium note list --tree
+# Create with specific type
+trilium note create --title "Code Snippet" --type code --mime "application/javascript"
 
-# Search notes
-trilium search "project" --limit 10 --context
+# Create as child of specific note
+trilium note create --title "Sub-note" --parent <parentNoteId>
 
-# Export notes
-trilium export obsidian my-note-id ./my-vault
+# Create from file
+trilium note create --title "Documentation" --file ./docs/README.md
+
+# Create with tags
+trilium note create --title "Project" --tags "work,important,project-x"
 ```
 
-#### Profile Management
+#### Reading Notes
 ```bash
-# Create multiple profiles
-trilium profile create work --server-url https://work-trilium.com --api-token WORK_TOKEN
-trilium profile create personal --server-url https://personal-trilium.com --api-token PERSONAL_TOKEN
+# Get note by ID
+trilium note get <noteId>
 
-# Switch between profiles
-trilium profile switch work
-trilium note list
+# Get note with content
+trilium note get <noteId> --content
 
-trilium profile switch personal
-trilium note list
+# Export note to file
+trilium note export <noteId> --format markdown --output note.md
+
+# List child notes
+trilium note list --parent <parentNoteId>
+
+# Tree view of entire hierarchy
+trilium note list --tree --depth 3
 ```
 
-## 🖥️ Command Line Interface
-
-### Core Commands
-
-#### Notes
+#### Updating Notes
 ```bash
-trilium note create <title>           # Create a new note
-trilium note list [parent-id]         # List notes
-trilium note get <note-id>            # Get note details
-trilium note update <note-id>         # Update note
-trilium note delete <note-id>         # Delete note
-trilium note search <query>           # Search notes
-trilium note move <note-id> <parent>  # Move note
-trilium note clone <note-id>          # Clone note
+# Update note title
+trilium note update <noteId> --title "New Title"
+
+# Update content from file
+trilium note update <noteId> --file updated-content.md
+
+# Move note to different parent
+trilium note move <noteId> --to <newParentId>
+
+# Clone note
+trilium note clone <noteId> --type "deep-clone"
 ```
 
-#### Search
+#### Deleting Notes
 ```bash
-trilium search <query>                # Basic search
-trilium search <query> --fast         # Fast search
-trilium search <query> --regex        # Regex search
-trilium search <query> --content      # Include content in results
-trilium search <query> --limit 50     # Limit results
+# Delete a note (with confirmation)
+trilium note delete <noteId>
+
+# Force delete without confirmation
+trilium note delete <noteId> --force
+
+# Delete multiple notes
+trilium note delete <id1> <id2> <id3> --force
 ```
 
-#### Import/Export
+### Search Operations
+
 ```bash
-trilium import obsidian <vault-path>   # Import Obsidian vault
-trilium export obsidian <note-id> <output-path>  # Export to Obsidian
-trilium import notion <zip-path>       # Import Notion export
-trilium import directory <dir-path>    # Import directory
-trilium export directory <note-id> <output-path>  # Export as directory
+# Basic text search
+trilium search "kubernetes deployment"
+
+# Search with options
+trilium search "docker" --limit 20 --fast
+
+# Search in archived notes
+trilium search "old project" --archived
+
+# Regex search
+trilium search "error.*fatal" --regex
+
+# Search with content preview
+trilium search "config" --content --context 2
+
+# Search by tags
+trilium search --tags "work AND urgent"
+
+# Complex attribute search
+trilium search --query "#book #status=reading @author=*Tolkien*"
 ```
 
-#### Profiles
+### Tag Management
+
 ```bash
-trilium profile create <name>         # Create new profile
-trilium profile list                  # List profiles
-trilium profile switch <name>         # Switch active profile
-trilium profile show [name]           # Show profile details
-trilium profile test [name]           # Test profile connection
-trilium profile delete <name>         # Delete profile
+# List all tags
+trilium tag list
+
+# Show tag hierarchy
+trilium tag list --tree
+
+# Search notes by tag
+trilium tag search "important"
+
+# Add tag to note
+trilium tag add <noteId> "reviewed"
+
+# Remove tag from note
+trilium tag remove <noteId> "draft"
+
+# Rename tag across all notes
+trilium tag rename "old-name" "new-name"
+
+# Show tag statistics
+trilium tag list --counts
 ```
 
-#### Tags & Attributes
+### Attachment Operations
+
 ```bash
-trilium tag list                      # List all tags
-trilium tag search <pattern>          # Search by tags
-trilium tag add <note-id> <tag>       # Add tag to note
-trilium tag remove <note-id> <tag>    # Remove tag from note
-trilium attribute create <note-id> <type> <name> <value>  # Create attribute
-trilium attribute list <note-id>      # List note attributes
+# List attachments for a note
+trilium attachment list <noteId>
+
+# Upload attachment
+trilium attachment upload <noteId> --file ./document.pdf --title "Report"
+
+# Download attachment
+trilium attachment download <attachmentId> --output ./downloads/
+
+# Delete attachment
+trilium attachment delete <attachmentId>
+
+# Get attachment info
+trilium attachment info <attachmentId>
+```
+
+### Import/Export
+
+#### Obsidian Integration
+```bash
+# Import from Obsidian vault
+trilium import obsidian --vault ~/Documents/ObsidianVault --parent <parentNoteId>
+
+# Export to Obsidian format
+trilium export obsidian <noteId> --output ~/Documents/NewVault
+
+# Sync with Obsidian (bidirectional)
+trilium sync obsidian --vault ~/Documents/ObsidianVault --note <noteId>
+```
+
+#### Notion Import
+```bash
+# Import Notion export
+trilium import notion --zip ~/Downloads/notion-export.zip --parent <parentId>
+
+# With options
+trilium import notion --zip export.zip --parent root --preserve-dates --skip-empty
+```
+
+#### Directory Operations
+```bash
+# Import directory structure
+trilium import dir --path ~/Documents/Notes --parent <parentId>
+
+# Export note tree to directory
+trilium export dir <noteId> --output ~/Export/Notes
+
+# Watch directory for changes
+trilium import dir --path ~/Notes --watch --auto-sync
+```
+
+### Profile Management
+
+```bash
+# List all profiles
+trilium profile list
+
+# Create new profile
+trilium profile create --name "work" --server https://work.trilium.example.com
+
+# Switch profile
+trilium profile set work
+
+# Clone profile
+trilium profile copy work personal
+
+# Delete profile
+trilium profile delete old-profile
+```
+
+### Advanced Features
+
+#### Templates
+```bash
+# List available templates
+trilium template list
+
+# Create note from template
+trilium template use "meeting-template" --title "Team Standup"
+
+# Create custom template
+trilium template create --title "Bug Report" --content-file ./templates/bug.md
+
+# Apply template to existing note
+trilium template apply <templateId> --to <noteId>
+```
+
+#### Quick Capture
+```bash
+# Quick note creation
+trilium quick "Remember to review PR #123"
+
+# Quick note with tags
+trilium quick "Call client at 3pm" --tags "urgent,calls"
+
+# Pipe content to quick note
+echo "Server logs" | trilium pipe --title "Debug Output"
+
+# Capture from clipboard
+trilium quick --clipboard --title "Saved from clipboard"
+```
+
+#### Batch Operations
+```bash
+# Batch tag addition
+trilium batch tag add --notes <id1>,<id2>,<id3> --tag "reviewed"
+
+# Batch move
+trilium batch move --notes <id1>,<id2> --to <parentId>
+
+# Batch export
+trilium batch export --notes <id1>,<id2>,<id3> --format markdown --output ./export/
 ```
 
 ## 🖼️ Terminal User Interface (TUI)
 
-Launch the interactive TUI with:
+### Launching the TUI
 ```bash
+# Start TUI with default profile
 trilium tui
+
+# Start with specific profile
+trilium tui --profile personal
+
+# Start in search mode
+trilium tui --search "project"
+
+# Start at specific note
+trilium tui --note <noteId>
 ```
+
+### TUI Navigation
+
+#### Keyboard Shortcuts
+
+**Global Navigation:**
+- `?` - Show help
+- `q` - Quit application
+- `Tab` - Switch between panels
+- `Ctrl+s` - Save current note
+- `Ctrl+f` - Focus search
+- `Ctrl+t` - Toggle tree view
+- `Ctrl+n` - Create new note
+- `Esc` - Cancel/Back
+
+**Tree View Navigation:**
+- `j`/`↓` - Move down
+- `k`/`↑` - Move up
+- `h`/`←` - Collapse node
+- `l`/`→` - Expand node
+- `Enter` - Select note
+- `Space` - Preview note
+- `d` - Delete note
+- `r` - Rename note
+- `m` - Move note
+- `c` - Create child note
+- `t` - Add tag
+- `/` - Search in tree
+
+**Note Editor:**
+- `i` - Enter insert mode
+- `Esc` - Exit insert mode
+- `Ctrl+s` - Save note
+- `Ctrl+z` - Undo
+- `Ctrl+y` - Redo
+- `Ctrl+b` - Bold
+- `Ctrl+i` - Italic
+- `Ctrl+k` - Insert link
+- `Ctrl+d` - Delete line
+
+**Search Panel:**
+- `Enter` - Execute search
+- `Tab` - Cycle through results
+- `Enter` (on result) - Open note
+- `Ctrl+Space` - Preview result
+- `Ctrl+o` - Change search options
+- `Ctrl+r` - Recent searches
 
 ### TUI Features
-- **📁 Tree Navigation**: Browse note hierarchy with collapsible folders
-- **📖 Content Viewer**: View and edit note content with syntax highlighting
-- **🔍 Interactive Search**: Real-time search with result highlighting
-- **⌨️ Vim-like Keybindings**: Efficient keyboard navigation
-- **📑 Multiple Panels**: Split view for tree and content
-- **🔖 Bookmarks**: Quick access to frequently used notes
 
-### Key Bindings
-```
-j/k or ↓/↑     Navigate up/down
-h/l or ←/→     Collapse/expand or move between panels
-Enter          Open selected note
-/              Start search
-n              Create new note
-d              Delete selected note
-e              Edit note in external editor
-q              Quit TUI
-?              Show help
-```
+#### Split View
+The TUI provides a three-panel layout:
+1. **Tree Panel** (Left): Hierarchical note navigation
+2. **Content Panel** (Center): Note viewing and editing
+3. **Info Panel** (Right): Metadata, tags, and attributes
 
-## ⚙️ Configuration
+#### Search Interface
+- Real-time search with highlighting
+- Filter by type, tags, or attributes
+- Search history and saved searches
+- Quick filters for recent, starred, or modified notes
 
-### Configuration File
-The CLI stores configuration in `~/.config/trilium-cli/config.json` (Linux/macOS) or `%APPDATA%/trilium-cli/config.json` (Windows).
+#### Note Editing
+- Syntax highlighting for code notes
+- Markdown preview mode
+- Auto-save functionality
+- Multiple cursor support
+- Find and replace
+
+#### Visual Indicators
+- 📎 - Has attachments
+- 🔒 - Protected note
+- ⭐ - Bookmarked
+- 🏷️ - Has tags
+- 📝 - Recently modified
+- 🔗 - Has many links
+
+### TUI Configuration
+
+Create a configuration file at `~/.config/trilium-cli/tui.json`:
 
 ```json
 {
-  "currentProfile": "default",
+  "theme": "dark",
+  "keyBindings": "vim",
+  "panels": {
+    "tree": { "width": 30 },
+    "content": { "width": 50 },
+    "info": { "width": 20 }
+  },
+  "editor": {
+    "tabSize": 2,
+    "wordWrap": true,
+    "lineNumbers": true,
+    "autoSave": true,
+    "autoSaveDelay": 5000
+  },
+  "search": {
+    "caseSensitive": false,
+    "highlightResults": true,
+    "maxResults": 50
+  }
+}
+```
+
+## 🔧 Configuration
+
+### Configuration File
+The CLI stores configuration at `~/.config/trilium-cli/config.json`:
+
+```json
+{
   "profiles": {
     "default": {
-      "name": "default",
       "serverUrl": "http://localhost:8080",
-      "apiToken": "etapi_...",
+      "apiToken": "your-api-token-here",
       "timeout": 30000,
-      "retries": 3
+      "retryAttempts": 3
+    },
+    "work": {
+      "serverUrl": "https://work-trilium.example.com",
+      "apiToken": "work-api-token"
     }
   },
-  "defaults": {
-    "outputFormat": "table",
-    "pageSize": 50,
-    "editor": "vim"
+  "currentProfile": "default",
+  "output": {
+    "format": "table",
+    "color": true,
+    "pager": true
+  },
+  "editor": {
+    "command": "vim",
+    "tempDir": "/tmp/trilium-cli"
   }
 }
 ```
 
 ### Environment Variables
-- `TRILIUM_SERVER_URL`: Override server URL
-- `TRILIUM_API_TOKEN`: Override API token
-- `TRILIUM_CONFIG_PATH`: Override config file path
-- `TRILIUM_DEBUG`: Enable debug logging
-- `EDITOR`: External editor for note editing
+```bash
+# Override server URL
+export TRILIUM_SERVER_URL=http://localhost:8080
 
-## 🔌 API Integration
+# Set API token
+export TRILIUM_API_TOKEN=your-token-here
 
-### Programmatic Usage
-```typescript
-import { TriliumClient } from 'trilium-cli-ts';
+# Set default profile
+export TRILIUM_PROFILE=work
 
-const client = new TriliumClient({
-  serverUrl: 'http://localhost:8080',
-  apiToken: 'your-api-token'
-});
+# Set output format
+export TRILIUM_OUTPUT=json
 
-// Create a note
-const note = await client.createNote({
-  title: 'API Created Note',
-  content: 'Content created via API',
-  type: 'text',
-  parentNoteId: 'root'
-});
-
-// Search notes
-const results = await client.searchNotes('project');
-
-// Get note with content
-const noteWithContent = await client.getNoteWithContent(note.noteId);
+# Disable colors
+export NO_COLOR=1
 ```
 
-### Available Methods
-The `TriliumClient` provides complete coverage of Trilium's ETAPI:
+### Command Aliases
+Add to your shell configuration:
 
-- **Notes**: `createNote`, `getNote`, `updateNote`, `deleteNote`, `searchNotes`
-- **Branches**: `createBranch`, `getBranch`, `updateBranch`, `deleteBranch`
-- **Attributes**: `createAttribute`, `getAttribute`, `updateAttribute`, `deleteAttribute`
-- **Attachments**: `createAttachment`, `getAttachment`, `updateAttachment`, `deleteAttachment`
-- **Search**: `searchNotes`, `searchNotesAdvanced`, `searchNotesEnhanced`
-- **Import/Export**: `exportNote`, `importNote`, various format-specific methods
+```bash
+# Quick aliases
+alias tn='trilium note'
+alias ts='trilium search'
+alias tt='trilium tui'
+alias tq='trilium quick'
+
+# Common operations
+alias tnew='trilium note create --edit'
+alias tsearch='trilium search --content --limit 10'
+alias ttree='trilium note list --tree --depth 3'
+
+# Functions for complex operations
+trilium-backup() {
+  trilium export dir root --output ~/TriliumBackup/$(date +%Y%m%d)
+}
+
+trilium-journal() {
+  trilium note create --title "Journal - $(date +%Y-%m-%d)" \
+    --parent journal --template daily-journal --edit
+}
+```
 
 ## 🧪 Testing
 
-The project includes comprehensive test coverage:
-
+### Running Tests
 ```bash
 # Run all tests
 npm test
@@ -262,153 +530,141 @@ npm test
 # Run with coverage
 npm run test:coverage
 
+# Run specific test suite
+npm test -- test/api/client.test.ts
+
+# Run in watch mode
+npm test -- --watch
+
 # Run integration tests
 npm run test:integration
 
-# Run specific test files
-npm test -- api/client.test.ts
+# Run with live Trilium instance
+TRILIUM_TEST_URL=http://localhost:8080 \
+TRILIUM_TEST_TOKEN=your-token \
+npm run test:live
 ```
 
-### Test Categories
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: API integration with mock server
-- **CLI Tests**: Command-line interface testing
-- **TUI Tests**: Terminal interface component testing
-- **Import/Export Tests**: Format conversion and file handling
+### Test Coverage
+The project maintains >90% test coverage across:
+- API client methods
+- CLI commands
+- TUI components
+- Import/export functions
+- Utility functions
 
-## 🛠️ Development
+## 🔌 Plugin Development
 
-### Prerequisites
-- Node.js 18+ (recommended: 20+)
-- TypeScript 5.3+
-- A running Trilium instance for testing
+### Creating a Plugin
+```typescript
+// my-plugin.ts
+import { Plugin, PluginContext } from 'trilium-cli-ts';
+
+export default class MyPlugin implements Plugin {
+  name = 'my-plugin';
+  version = '1.0.0';
+
+  async init(context: PluginContext) {
+    // Register command
+    context.registerCommand({
+      name: 'my-command',
+      description: 'Custom command',
+      handler: async (args) => {
+        const client = context.getClient();
+        // Your logic here
+      }
+    });
+
+    // Hook into events
+    context.on('note:created', async (note) => {
+      console.log('Note created:', note.title);
+    });
+  }
+}
+```
+
+### Installing Plugins
+```bash
+# Install from npm
+trilium plugin install trilium-plugin-example
+
+# Install from file
+trilium plugin install ./my-plugin.js
+
+# List installed plugins
+trilium plugin list
+
+# Remove plugin
+trilium plugin uninstall my-plugin
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ### Development Setup
 ```bash
-# Clone and setup
+# Clone repository
 git clone https://github.com/yourusername/trilium-cli-ts
 cd trilium-cli-ts
+
+# Install dependencies
 npm install
 
-# Development commands
-npm run dev                    # Run in development mode
-npm run dev:watch             # Watch mode with auto-reload
-npm run build                 # Build for production
-npm run test:watch            # Run tests in watch mode
-npm run lint                  # Run linter
-npm run typecheck            # Run type checking
+# Run in development mode
+npm run dev
+
+# Run tests
+npm test
+
+# Build project
+npm run build
 ```
 
-### Project Structure
-```
-trilium-cli-ts/
-├── src/
-│   ├── api/                  # API client implementation
-│   ├── cli/                  # CLI commands and parsing
-│   ├── tui/                  # Terminal UI components
-│   ├── import-export/        # Import/export functionality
-│   ├── utils/                # Utility functions
-│   ├── types/                # TypeScript type definitions
-│   ├── config/               # Configuration management
-│   └── bin/                  # Executable entry points
-├── test/                     # Test suites
-├── scripts/                  # Build and utility scripts
-└── docs/                     # Additional documentation
-```
+## 📚 API Documentation
 
-### Contributing
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Make your changes with tests
-4. Run the test suite: `npm test`
-5. Commit your changes: `git commit -m 'Add amazing feature'`
-6. Push to your branch: `git push origin feature/amazing-feature`
-7. Open a Pull Request
-
-## 📋 Migration from Rust Version
-
-### Key Differences
-- **Language**: TypeScript instead of Rust
-- **Ecosystem**: npm/Node.js ecosystem vs Cargo/Rust
-- **Performance**: Slightly higher memory usage but better integration with web tools
-- **Development**: More accessible to web developers
-
-### Migration Steps
-1. **Export your current configuration**: The TypeScript version uses a different config format
-2. **Reinstall**: `cargo uninstall trilium-cli && npm install -g trilium-cli-ts`
-3. **Reconfigure**: Run `trilium profile create` to set up your profiles
-4. **Test functionality**: All commands should work identically
-
-### Feature Parity
-✅ All CLI commands
-✅ TUI interface
-✅ Import/export functionality
-✅ Profile management
-✅ Search capabilities
-✅ API coverage
+For detailed API documentation, see [API.md](docs/API.md).
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Connection Issues**
+**Connection Refused**
 ```bash
-# Test your connection
-trilium profile test
+# Check if Trilium is running
+curl http://localhost:8080/api/health
 
-# Check server URL and API token
-trilium profile show
-
-# Enable debug logging
-TRILIUM_DEBUG=1 trilium note list
+# Verify ETAPI is enabled in Trilium settings
 ```
 
-**Build Issues**
+**Authentication Failed**
 ```bash
-# Clean install
-rm -rf node_modules package-lock.json
-npm install
-
-# Verify Node.js version
-node --version  # Should be 18+
+# Regenerate token in Trilium settings
+# Update configuration
+trilium config set apiToken <new-token>
 ```
 
-**TUI Issues**
+**TUI Display Issues**
 ```bash
-# Check terminal compatibility
+# Check terminal capabilities
 echo $TERM
 
-# Run in compatibility mode
-TERM=xterm trilium tui
+# Try different terminal
+TERM=xterm-256color trilium tui
 ```
-
-### Getting Help
-- 📖 [Full Documentation](./docs/)
-- 🐛 [Issue Tracker](https://github.com/yourusername/trilium-cli-ts/issues)
-- 💬 [Discussions](https://github.com/yourusername/trilium-cli-ts/discussions)
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-- **[Trilium Notes](https://github.com/zadam/trilium)**: The amazing note-taking application this CLI supports
-- **Original Rust Implementation**: Inspiration and feature reference
-- **TypeScript Community**: Tools and libraries that make this project possible
-- **Contributors**: Everyone who has contributed to making this project better
+- [Trilium Notes](https://github.com/zadam/trilium) for the amazing note-taking application
+- Built with [Commander.js](https://github.com/tj/commander.js), [Ink](https://github.com/vadimdemedes/ink), and [TypeScript](https://www.typescriptlang.org/)
 
-## 🔄 Changelog
+## 📞 Support
 
-### v0.1.0 (Current)
-- ✨ Initial TypeScript implementation
-- ✨ Complete CLI interface
-- ✨ Interactive TUI
-- ✨ Multi-profile support
-- ✨ Import/export capabilities
-- ✨ Comprehensive test suite
-- ✨ Full API coverage
-
----
-
-**Made with ❤️ for the Trilium community**
+- 📖 [Documentation](https://github.com/yourusername/trilium-cli-ts/wiki)
+- 🐛 [Issue Tracker](https://github.com/yourusername/trilium-cli-ts/issues)
+- 💬 [Discussions](https://github.com/yourusername/trilium-cli-ts/discussions)
+- 📧 Email: support@example.com
