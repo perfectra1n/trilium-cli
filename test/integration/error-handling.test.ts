@@ -10,16 +10,13 @@ import { getLiveTestConfig } from './live-test.config.js';
  * from the live Trilium API, ensuring robust error handling.
  */
 
-describe('Trilium API Error Handling', () => {
-  const config = getLiveTestConfig();
+const config = getLiveTestConfig();
+
+describe.skipIf(!config.enabled)('Trilium API Error Handling', () => {
   
   let client: TriliumClient;
 
   beforeAll(async () => {
-    if (!config.enabled) {
-      return;
-    }
-
     client = new TriliumClient({
       baseUrl: config.serverUrl,
       apiToken: config.apiToken,
@@ -31,12 +28,6 @@ describe('Trilium API Error Handling', () => {
     await client.getAppInfo();
   });
 
-  beforeEach(() => {
-    if (!config.enabled) {
-      // @ts-ignore - vitest's skip functionality
-      return;
-    }
-  });
 
   describe('Authentication Errors', () => {
     it('should handle invalid API token', async () => {

@@ -257,23 +257,52 @@ export class HttpClient {
 
         // Handle AbortController timeout errors specifically
         if (error instanceof Error && error.name === 'AbortError') {
+          // Retry on timeout if we haven't exceeded retries
+          if (attempt < this.retries) {
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            continue;
+          }
           throw new NetworkError(`Request timeout after ${this.timeout}ms`, error);
         }
 
+        // Don't retry on client errors (4xx) except 429 (rate limit)
         if (error instanceof ApiError) {
+          if (error.status && error.status >= 400 && error.status < 500 && error.status !== 429) {
+            throw error;
+          }
+          // Retry on 429 (rate limit) and 5xx errors
+          if (error.status === 429 || (error.status && error.status >= 500)) {
+            if (attempt < this.retries) {
+              await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+              continue;
+            }
+          }
           throw error;
         }
 
-        // Don't retry on certain error types
-        if (error instanceof TypeError && error.message.includes('fetch')) {
-          throw new NetworkError('Network connection failed', error);
+        // Retry on network errors
+        if (error instanceof TypeError || 
+            (error instanceof Error && (
+              error.message.includes('ECONNRESET') ||
+              error.message.includes('ETIMEDOUT') ||
+              error.message.includes('ECONNREFUSED') ||
+              error.message.includes('EHOSTUNREACH') ||
+              error.message.includes('ENETUNREACH') ||
+              error.message.includes('EAI_AGAIN') ||
+              error.message.includes('network') ||
+              error.message.includes('fetch failed')
+            ))) {
+          if (attempt < this.retries) {
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            continue;
+          }
         }
 
         if (attempt === this.retries) {
           break;
         }
 
-        // Wait before retrying (exponential backoff)
+        // Default: retry with exponential backoff
         await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
       }
     }

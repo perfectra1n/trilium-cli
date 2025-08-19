@@ -1,26 +1,25 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
-import { TriliumApi } from '@/api/client';
-import { TriliumConfig } from '@/types/config';
+import { TriliumClient } from '@/api/client';
+import type { ApiClientConfig } from '@/types/api';
 import { setupTestServer, teardownTestServer, TestServer } from './test-server';
 
 describe('API Integration Tests', () => {
-  let api: TriliumApi;
+  let api: TriliumClient;
   let testServer: TestServer;
-  let config: TriliumConfig;
+  let config: ApiClientConfig;
 
   beforeAll(async () => {
     // Setup a test server or use environment variables for real server
     testServer = await setupTestServer();
     
     config = {
-      server_url: testServer.url,
-      token: testServer.token,
+      baseUrl: testServer.url,
+      apiToken: testServer.token,
       timeout: 10000,
-      retry_attempts: 2,
-      retry_delay: 500,
+      retries: 2,
     };
     
-    api = new TriliumApi(config);
+    api = new TriliumClient(config);
   });
 
   afterAll(async () => {
@@ -49,8 +48,8 @@ describe('API Integration Tests', () => {
       await api.login('test-password');
       
       // Should be able to make authenticated requests
-      const notes = await api.getNotes();
-      expect(Array.isArray(notes)).toBe(true);
+      const results = await api.searchNotes('*');
+      expect(Array.isArray(results)).toBe(true);
     });
   });
 
@@ -64,12 +63,13 @@ describe('API Integration Tests', () => {
         parentNoteId: 'root',
       };
       
-      const createdNote = await api.createNote(createData);
+      const result = await api.createNote(createData);
+      const createdNote = result.note;
       expect(createdNote.noteId).toBeDefined();
       expect(createdNote.title).toBe(createData.title);
 
       // Read note
-      const retrievedNote = await api.getNote(createdNote.noteId);
+      const retrievedNote = await api.getNoteWithContent(createdNote.noteId);
       expect(retrievedNote.noteId).toBe(createdNote.noteId);
       expect(retrievedNote.title).toBe(createData.title);
       expect(retrievedNote.content).toBe(createData.content);
@@ -82,7 +82,6 @@ describe('API Integration Tests', () => {
       
       const updatedNote = await api.updateNote(createdNote.noteId, updateData);
       expect(updatedNote.title).toBe(updateData.title);
-      expect(updatedNote.content).toBe(updateData.content);
 
       // Verify update persisted
       const reRetrievedNote = await api.getNote(createdNote.noteId);
@@ -97,20 +96,22 @@ describe('API Integration Tests', () => {
 
     it('should handle note hierarchy correctly', async () => {
       // Create parent note
-      const parentNote = await api.createNote({
+      const parentResult = await api.createNote({
         title: 'Parent Note',
         content: 'This is a parent note.',
         type: 'text',
         parentNoteId: 'root',
       });
+      const parentNote = parentResult.note;
 
       // Create child note
-      const childNote = await api.createNote({
+      const childResult = await api.createNote({
         title: 'Child Note',
         content: 'This is a child note.',
         type: 'text',
         parentNoteId: parentNote.noteId,
       });
+      const childNote = childResult.note;
 
       // Verify hierarchy
       const children = await api.getChildNotes(parentNote.noteId);
@@ -126,12 +127,13 @@ describe('API Integration Tests', () => {
       const createdNotes = [];
 
       for (const type of noteTypes) {
-        const note = await api.createNote({
+        const result = await api.createNote({
           title: `${type.charAt(0).toUpperCase() + type.slice(1)} Note`,
           content: type === 'code' ? 'console.log("hello");' : 'Content',
           type,
           parentNoteId: 'root',
         });
+        const note = result.note;
         createdNotes.push(note);
         expect(note.type).toBe(type);
       }

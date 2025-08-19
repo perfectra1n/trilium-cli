@@ -5,12 +5,13 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    setupFiles: ['./test/setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
       exclude: [
-        'node_modules/',
-        'dist/',
+        'node_modules/**',
+        'dist/**',
         '**/*.d.ts',
         '**/*.config.*',
         '**/*.test.*',
@@ -18,9 +19,11 @@ export default defineConfig({
       ],
     },
     exclude: [
-      'node_modules/',
-      'dist/',
-      '.git/',
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/.git/**',
+      '**/.pnpm/**',
+      '**/.ignored/**',
     ],
   },
   resolve: {

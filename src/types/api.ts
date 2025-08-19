@@ -481,11 +481,12 @@ export interface TemplateVariable {
  * Template for creating notes
  */
 export interface Template {
-  id: EntityId;
+  noteId: EntityId;  // Changed from 'id' to 'noteId' to match API response
   title: string;
-  content: string;
-  variables: TemplateVariable[];
-  description: string;
+  type: NoteType;    // Added type field
+  content?: string;  // Made optional
+  variables?: TemplateVariable[];  // Made optional
+  description?: string;  // Made optional
 }
 
 /**

@@ -175,7 +175,7 @@ describe('Core CLI Tests', () => {
     describe('Create Note', () => {
       it('should create a note with basic properties', async () => {
         const mockNote: Note = {
-          noteId: 'test123',
+          noteId: 'test123456789012',
           title: 'Test Note',
           type: 'text',
           dateCreated: '2024-01-01',
@@ -187,9 +187,9 @@ describe('Core CLI Tests', () => {
           attributes: []
         };
 
-        clientInstance.createNote.mockResolvedValue(mockNote);
+        clientInstance.createNote.mockResolvedValue({ note: mockNote, branch: {} });
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
@@ -207,12 +207,12 @@ describe('Core CLI Tests', () => {
           type: 'text',
           parentNoteId: 'root'
         });
-        expect(result).toEqual(mockNote);
+        expect(result).toEqual({ note: mockNote, branch: {} });
       });
 
       it('should create a note with attributes', async () => {
         const mockNote: Note = {
-          noteId: 'test124',
+          noteId: 'test124567890123',
           title: 'Note with Attrs',
           type: 'text',
           dateCreated: '2024-01-01',
@@ -222,14 +222,14 @@ describe('Core CLI Tests', () => {
           isProtected: false,
           isDeleted: false,
           attributes: [
-            { attributeId: 'attr1', noteId: 'test124', type: 'label', name: 'todo', value: '', position: 0 },
-            { attributeId: 'attr2', noteId: 'test124', type: 'relation', name: 'template', value: 'template1', position: 1 }
+            { attributeId: 'attr1_123456789', noteId: 'test124567890123', type: 'label', name: 'todo', value: '', position: 0 },
+            { attributeId: 'attr2_123456789', noteId: 'test124567890123', type: 'relation', name: 'template', value: 'template1234567', position: 1 }
           ]
         };
 
-        clientInstance.createNote.mockResolvedValue(mockNote);
+        clientInstance.createNote.mockResolvedValue({ note: mockNote, branch: {} });
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
@@ -241,9 +241,9 @@ describe('Core CLI Tests', () => {
           parentNoteId: 'root'
         });
 
-        expect(result.attributes).toHaveLength(2);
-        expect(result.attributes?.[0].type).toBe('label');
-        expect(result.attributes?.[1].type).toBe('relation');
+        expect(result.note.attributes).toHaveLength(2);
+        expect(result.note.attributes?.[0].type).toBe('label');
+        expect(result.note.attributes?.[1].type).toBe('relation');
       });
 
       it('should handle creation errors', async () => {
@@ -251,7 +251,7 @@ describe('Core CLI Tests', () => {
           new ApiError('Failed to create note', 400)
         );
 
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
@@ -268,7 +268,7 @@ describe('Core CLI Tests', () => {
     describe('Get Note', () => {
       it('should retrieve a note by ID', async () => {
         const mockNote: Note = {
-          noteId: 'test123',
+          noteId: 'test123456789012',
           title: 'Retrieved Note',
           type: 'text',
           dateCreated: '2024-01-01',
@@ -282,20 +282,20 @@ describe('Core CLI Tests', () => {
 
         clientInstance.getNote.mockResolvedValue(mockNote);
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
 
-        const result = await client.getNote('test123');
+        const result = await client.getNote('test123456789012');
 
-        expect(clientInstance.getNote).toHaveBeenCalledWith('test123');
-        expect(result).toEqual(mockNote);
+        expect(clientInstance.getNote).toHaveBeenCalledWith('test123456789012');
+        expect(result).toEqual({ note: mockNote, branch: {} });
       });
 
       it('should retrieve a note with content', async () => {
         const mockNote: NoteWithContent = {
-          noteId: 'test123',
+          noteId: 'test123456789012',
           title: 'Note with Content',
           type: 'text',
           content: 'This is the note content',
@@ -310,14 +310,14 @@ describe('Core CLI Tests', () => {
 
         clientInstance.getNoteWithContent.mockResolvedValue(mockNote);
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
 
-        const result = await client.getNoteWithContent('test123');
+        const result = await client.getNoteWithContent('test123456789012');
 
-        expect(clientInstance.getNoteWithContent).toHaveBeenCalledWith('test123');
+        expect(clientInstance.getNoteWithContent).toHaveBeenCalledWith('test123456789012');
         expect(result.content).toBe('This is the note content');
       });
 
@@ -326,7 +326,7 @@ describe('Core CLI Tests', () => {
           new ApiError('Note not found', 404)
         );
 
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
@@ -339,17 +339,17 @@ describe('Core CLI Tests', () => {
       it('should update note properties', async () => {
         clientInstance.updateNote.mockResolvedValue(undefined);
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
 
-        await client.updateNote('test123', {
+        await client.updateNote('test123456789012', {
           title: 'Updated Title',
           content: 'Updated content'
         });
 
-        expect(clientInstance.updateNote).toHaveBeenCalledWith('test123', {
+        expect(clientInstance.updateNote).toHaveBeenCalledWith('test123456789012', {
           title: 'Updated Title',
           content: 'Updated content'
         });
@@ -360,12 +360,12 @@ describe('Core CLI Tests', () => {
           new ValidationError('Invalid update data')
         );
 
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
 
-        await expect(client.updateNote('test123', {
+        await expect(client.updateNote('test123456789012', {
           title: ''
         })).rejects.toThrow(ValidationError);
       });
@@ -375,14 +375,14 @@ describe('Core CLI Tests', () => {
       it('should delete a note', async () => {
         clientInstance.deleteNote.mockResolvedValue(undefined);
         
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
 
-        await client.deleteNote('test123');
+        await client.deleteNote('test123456789012');
 
-        expect(clientInstance.deleteNote).toHaveBeenCalledWith('test123');
+        expect(clientInstance.deleteNote).toHaveBeenCalledWith('test123456789012');
       });
 
       it('should handle deletion errors', async () => {
@@ -390,7 +390,7 @@ describe('Core CLI Tests', () => {
           new ApiError('Cannot delete root note', 400)
         );
 
-        const _client = new TriliumClient({
+        const client = new TriliumClient({
           baseUrl: 'http://localhost:9999',
           apiToken: 'test-token'
         });
@@ -415,12 +415,12 @@ describe('Core CLI Tests', () => {
     it('should search notes with query', async () => {
       const mockResults: SearchResult[] = [
         {
-          noteId: 'result1',
+          noteId: 'result1234567890',
           title: 'Search Result 1',
           score: 0.95
         },
         {
-          noteId: 'result2',
+          noteId: 'result2234567890',
           title: 'Search Result 2',
           score: 0.85
         }
@@ -428,7 +428,7 @@ describe('Core CLI Tests', () => {
 
       clientInstance.searchNotes.mockResolvedValue(mockResults);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -443,7 +443,7 @@ describe('Core CLI Tests', () => {
     it('should handle empty search results', async () => {
       clientInstance.searchNotes.mockResolvedValue([]);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -456,7 +456,7 @@ describe('Core CLI Tests', () => {
     it('should handle search with advanced options', async () => {
       const mockResults: SearchResult[] = [
         {
-          noteId: 'archived1',
+          noteId: 'archived1234567',
           title: 'Archived Note',
           score: 0.9
         }
@@ -464,7 +464,7 @@ describe('Core CLI Tests', () => {
 
       clientInstance.searchNotes.mockResolvedValue(mockResults);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -491,8 +491,8 @@ describe('Core CLI Tests', () => {
 
     it('should get branch details', async () => {
       const mockBranch: Branch = {
-        branchId: 'branch123',
-        noteId: 'note123',
+        branchId: 'branch123456789',
+        noteId: 'note123456789012',
         parentNoteId: 'parent123',
         prefix: '',
         notePosition: 0,
@@ -502,22 +502,22 @@ describe('Core CLI Tests', () => {
 
       clientInstance.getBranch.mockResolvedValue(mockBranch);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
-      const branch = await client.getBranch('branch123');
+      const branch = await client.getBranch('branch123456789');
 
-      expect(clientInstance.getBranch).toHaveBeenCalledWith('branch123');
-      expect(branch.branchId).toBe('branch123');
+      expect(clientInstance.getBranch).toHaveBeenCalledWith('branch123456789');
+      expect(branch.branchId).toBe('branch123456789');
     });
 
     it('should create a new branch', async () => {
       const mockBranch: Branch = {
         branchId: 'newbranch',
-        noteId: 'note456',
-        parentNoteId: 'parent456',
+        noteId: 'note456789012345',
+        parentNoteId: 'parent456789012',
         prefix: 'Chapter 1',
         notePosition: 0,
         isExpanded: false,
@@ -526,20 +526,20 @@ describe('Core CLI Tests', () => {
 
       clientInstance.createBranch.mockResolvedValue(mockBranch);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
       const branch = await client.createBranch({
-        noteId: 'note456',
-        parentNoteId: 'parent456',
+        noteId: 'note456789012345',
+        parentNoteId: 'parent456789012',
         prefix: 'Chapter 1'
       });
 
       expect(clientInstance.createBranch).toHaveBeenCalledWith({
-        noteId: 'note456',
-        parentNoteId: 'parent456',
+        noteId: 'note456789012345',
+        parentNoteId: 'parent456789012',
         prefix: 'Chapter 1'
       });
       expect(branch.prefix).toBe('Chapter 1');
@@ -562,8 +562,8 @@ describe('Core CLI Tests', () => {
 
     it('should get attribute details', async () => {
       const mockAttribute: Attribute = {
-        attributeId: 'attr123',
-        noteId: 'note123',
+        attributeId: 'attr123456789012',
+        noteId: 'note123456789012',
         type: 'label',
         name: 'todo',
         value: '',
@@ -574,14 +574,14 @@ describe('Core CLI Tests', () => {
 
       clientInstance.getAttribute.mockResolvedValue(mockAttribute);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
-      const attr = await client.getAttribute('attr123');
+      const attr = await client.getAttribute('attr123456789012');
 
-      expect(clientInstance.getAttribute).toHaveBeenCalledWith('attr123');
+      expect(clientInstance.getAttribute).toHaveBeenCalledWith('attr123456789012');
       expect(attr.type).toBe('label');
       expect(attr.name).toBe('todo');
     });
@@ -589,7 +589,7 @@ describe('Core CLI Tests', () => {
     it('should create a label attribute', async () => {
       const mockAttribute: Attribute = {
         attributeId: 'newattr1',
-        noteId: 'note123',
+        noteId: 'note123456789012',
         type: 'label',
         name: 'important',
         value: '',
@@ -600,13 +600,13 @@ describe('Core CLI Tests', () => {
 
       clientInstance.createAttribute.mockResolvedValue(mockAttribute);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
       const attr = await client.createAttribute({
-        noteId: 'note123',
+        noteId: 'note123456789012',
         type: 'label',
         name: 'important',
         value: ''
@@ -619,10 +619,10 @@ describe('Core CLI Tests', () => {
     it('should create a relation attribute', async () => {
       const mockAttribute: Attribute = {
         attributeId: 'newattr2',
-        noteId: 'note123',
+        noteId: 'note123456789012',
         type: 'relation',
         name: 'template',
-        value: 'template123',
+        value: 'template1234567',
         position: 0,
         isInheritable: false,
         utcDateModified: '2024-01-01T00:00:00.000Z'
@@ -630,33 +630,33 @@ describe('Core CLI Tests', () => {
 
       clientInstance.createAttribute.mockResolvedValue(mockAttribute);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
       const attr = await client.createAttribute({
-        noteId: 'note123',
+        noteId: 'note123456789012',
         type: 'relation',
         name: 'template',
-        value: 'template123'
+        value: 'template1234567'
       });
 
       expect(attr.type).toBe('relation');
-      expect(attr.value).toBe('template123');
+      expect(attr.value).toBe('template1234567');
     });
 
     it('should delete an attribute', async () => {
       clientInstance.deleteAttribute.mockResolvedValue(undefined);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
-      await client.deleteAttribute('attr123');
+      await client.deleteAttribute('attr123456789012');
 
-      expect(clientInstance.deleteAttribute).toHaveBeenCalledWith('attr123');
+      expect(clientInstance.deleteAttribute).toHaveBeenCalledWith('attr123456789012');
     });
   });
 
@@ -687,7 +687,7 @@ describe('Core CLI Tests', () => {
 
       clientInstance.getAppInfo.mockResolvedValue(mockInfo);
       
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -718,7 +718,7 @@ describe('Core CLI Tests', () => {
       const apiError = new ApiError('Not Found', 404);
       clientInstance.getNote.mockRejectedValue(apiError);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -731,7 +731,7 @@ describe('Core CLI Tests', () => {
       const authError = new AuthError('Invalid token');
       clientInstance.getAppInfo.mockRejectedValue(authError);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'invalid-token'
       });
@@ -743,7 +743,7 @@ describe('Core CLI Tests', () => {
       const validationError = new ValidationError('Invalid note type');
       clientInstance.createNote.mockRejectedValue(validationError);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -760,7 +760,7 @@ describe('Core CLI Tests', () => {
       const triliumError = new TriliumError('Server error');
       clientInstance.getNote.mockRejectedValue(triliumError);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -772,7 +772,7 @@ describe('Core CLI Tests', () => {
   describe('Output Formatting', () => {
     it('should format JSON output when json flag is set', () => {
       const data = {
-        noteId: 'test123',
+        noteId: 'test123456789012',
         title: 'Test Note',
         type: 'text'
       };
@@ -795,7 +795,7 @@ describe('Core CLI Tests', () => {
 
     it('should format single note output', () => {
       const note = {
-        noteId: 'test123',
+        noteId: 'test123456789012',
         title: 'My Note',
         type: 'text',
         content: 'Note content',
@@ -804,7 +804,7 @@ describe('Core CLI Tests', () => {
       };
 
       // Verify note structure
-      expect(note.noteId).toBe('test123');
+      expect(note.noteId).toBe('test123456789012');
       expect(note.title).toBe('My Note');
       expect(note.content).toBeDefined();
     });
@@ -821,7 +821,7 @@ describe('Core CLI Tests', () => {
     it('should export note to file', async () => {
       const clientInstance = {
         getNoteWithContent: vi.fn().mockResolvedValue({
-          noteId: 'test123',
+          noteId: 'test123456789012',
           title: 'Export Test',
           type: 'text',
           content: '<p>HTML content</p>',
@@ -838,12 +838,12 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
 
-      const note = await client.getNoteWithContent('test123');
+      const note = await client.getNoteWithContent('test123456789012');
       
       // Simulate export
       const exportPath = '/tmp/export.md';
@@ -871,7 +871,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -948,7 +948,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -969,7 +969,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -1023,7 +1023,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -1053,7 +1053,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -1089,7 +1089,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token'
       });
@@ -1123,7 +1123,7 @@ describe('Core CLI Tests', () => {
       mockClient = TriliumClient as MockedFunction<typeof TriliumClient>;
       mockClient.mockImplementation(() => clientInstance as any);
 
-      const _client = new TriliumClient({
+      const client = new TriliumClient({
         baseUrl: 'http://localhost:9999',
         apiToken: 'test-token',
         debugMode: true
@@ -1198,7 +1198,7 @@ describe('Core CLI Tests', () => {
 
       expect(parsed).toHaveLength(2);
       expect(parsed[0].type).toBe('relation');
-      expect(parsed[0].value).toBe('template123');
+      expect(parsed[0].value).toBe('template1234567');
     });
 
     it('should handle mixed attribute types', () => {

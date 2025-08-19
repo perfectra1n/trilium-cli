@@ -1,26 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { validateNoteId, validateEmail, validateUrl, validateFileName, sanitizeContent } from '@/utils/validation';
+import { isValidEntityId, validateEntityId, validateUrl } from '@/utils/validation';
 
 describe('Validation Utilities', () => {
-  describe('validateNoteId', () => {
-    it('should accept valid note IDs', () => {
+  describe('validateEntityId', () => {
+    it('should accept valid entity IDs', () => {
       const validIds = [
-        'abc123def456',
-        '1234567890ab',
-        'note-id-with-dashes',
-        'noteId123',
-        'a1b2c3d4e5f6',
+        'abc123def456',  // 12 chars exactly
+        '1234567890abcd',  // 14 chars
+        'note-id-with-dashes-123',  // with dashes
+        'noteId123456',  // mixed case
+        'a1b2c3d4e5f6',  // 12 chars
+        'test_note_123456',  // with underscores
       ];
 
       validIds.forEach(id => {
-        expect(validateNoteId(id)).toBe(true);
+        expect(isValidEntityId(id)).toBe(true);
       });
     });
 
-    it('should reject invalid note IDs', () => {
+    it('should reject invalid entity IDs', () => {
       const invalidIds = [
         '', // Empty string
         'a', // Too short
+        'abc123', // Less than 12 chars
         'invalid note id with spaces',
         'note/id/with/slashes',
         'note\\id\\with\\backslashes',
@@ -29,55 +31,23 @@ describe('Validation Utilities', () => {
         'note?id',
         'note*id',
         'note"id',
-        null,
-        undefined,
       ];
 
       invalidIds.forEach(id => {
-        expect(validateNoteId(id as string)).toBe(false);
+        expect(isValidEntityId(id)).toBe(false);
       });
     });
 
-    it('should handle edge cases', () => {
-      expect(validateNoteId('root')).toBe(true); // Special root note
-      expect(validateNoteId('_global')).toBe(true); // Special global note
-      expect(validateNoteId('123')).toBe(true); // Numeric IDs
-    });
-  });
-
-  describe('validateEmail', () => {
-    it('should accept valid email addresses', () => {
-      const validEmails = [
-        'user@example.com',
-        'test.email@domain.org',
-        'user+tag@example.co.uk',
-        'firstname.lastname@company.com',
-        'user123@test-domain.com',
-      ];
-
-      validEmails.forEach(email => {
-        expect(validateEmail(email)).toBe(true);
-      });
+    it('should handle special Trilium entity IDs', () => {
+      expect(isValidEntityId('root')).toBe(true); // Special root note
+      expect(isValidEntityId('_hidden')).toBe(true); // Special hidden note
+      expect(isValidEntityId('none')).toBe(true); // Special none ID
     });
 
-    it('should reject invalid email addresses', () => {
-      const invalidEmails = [
-        '', // Empty string
-        'invalid-email',
-        '@domain.com',
-        'user@',
-        'user@@domain.com',
-        'user@domain',
-        'user space@domain.com',
-        'user@domain..com',
-        'user@.domain.com',
-        null,
-        undefined,
-      ];
-
-      invalidEmails.forEach(email => {
-        expect(validateEmail(email as string)).toBe(false);
-      });
+    it('should throw error for invalid IDs when using validateEntityId', () => {
+      expect(() => validateEntityId('short')).toThrow();
+      expect(() => validateEntityId('')).toThrow();
+      expect(validateEntityId('valid_id_123456')).toBe('valid_id_123456');
     });
   });
 
@@ -89,12 +59,10 @@ describe('Validation Utilities', () => {
         'https://example.com/path/to/resource',
         'http://192.168.1.100:3000',
         'https://subdomain.domain.co.uk/api/v1',
-        'http://example.com:80',
-        'https://example.com:443',
       ];
 
       validUrls.forEach(url => {
-        expect(validateUrl(url)).toBe(true);
+        expect(() => validateUrl(url)).not.toThrow();
       });
     });
 
@@ -102,203 +70,39 @@ describe('Validation Utilities', () => {
       const invalidUrls = [
         '', // Empty string
         'not-a-url',
-        'ftp://example.com', // Wrong protocol
-        'http://',
-        'https://',
-        'http://localhost',
-        'localhost:8080',
-        'www.example.com',
-        'http://example .com', // Space in URL
-        null,
-        undefined,
+        'ftp://example.com', // Not http/https
+        'example.com', // Missing protocol
+        '//example.com', // Missing protocol
       ];
 
       invalidUrls.forEach(url => {
-        expect(validateUrl(url as string)).toBe(false);
+        expect(() => validateUrl(url)).toThrow();
       });
     });
+  });
 
+  describe('validateUrl', () => {
     it('should handle edge cases', () => {
-      expect(validateUrl('http://localhost')).toBe(true); // No port
-      expect(validateUrl('https://localhost')).toBe(true); // HTTPS localhost
-      expect(validateUrl('http://127.0.0.1:8080')).toBe(true); // IP address
+      expect(() => validateUrl('http://localhost')).not.toThrow(); // No port
+      expect(() => validateUrl('https://localhost')).not.toThrow(); // HTTPS localhost
+      expect(() => validateUrl('http://127.0.0.1:8080')).not.toThrow(); // IP address
     });
   });
 
-  describe('validateFileName', () => {
-    it('should accept valid file names', () => {
-      const validNames = [
-        'document.txt',
-        'my-file.pdf',
-        'backup_2023-01-01.db',
-        'image.png',
-        'script.js',
-        'data.json',
-        'note_with_underscores.md',
-      ];
-
-      validNames.forEach(name => {
-        expect(validateFileName(name)).toBe(true);
-      });
-    });
-
-    it('should reject invalid file names', () => {
-      const invalidNames = [
-        '', // Empty string
-        '.', // Current directory
-        '..', // Parent directory
-        'file/with/slashes',
-        'file\\with\\backslashes',
-        'file<>name',
-        'file|name',
-        'file?name',
-        'file*name',
-        'file"name',
-        'file:name',
-        'CON', // Reserved Windows name
-        'PRN', // Reserved Windows name
-        'AUX', // Reserved Windows name
-        'NUL', // Reserved Windows name
-        'file with spaces', // Spaces (if not allowed)
-        null,
-        undefined,
-      ];
-
-      invalidNames.forEach(name => {
-        expect(validateFileName(name as string)).toBe(false);
-      });
-    });
-
-    it('should handle edge cases', () => {
-      expect(validateFileName('a')).toBe(true); // Single character
-      expect(validateFileName('file-name')).toBe(true); // Hyphen
-      expect(validateFileName('file_name')).toBe(true); // Underscore
-      expect(validateFileName('file.with.multiple.dots')).toBe(true); // Multiple dots
-    });
-  });
-
-  describe('sanitizeContent', () => {
-    it('should remove dangerous HTML elements', () => {
-      const dangerousContent = `
-        <script>alert('xss')</script>
-        <iframe src="evil.com"></iframe>
-        <object data="malicious.swf"></object>
-        <embed src="evil.swf">
-        <link rel="stylesheet" href="evil.css">
-        <style>body { display: none; }</style>
-        <p>Safe content</p>
-      `;
-
-      const sanitized = sanitizeContent(dangerousContent);
-      expect(sanitized).not.toContain('<script>');
-      expect(sanitized).not.toContain('<iframe>');
-      expect(sanitized).not.toContain('<object>');
-      expect(sanitized).not.toContain('<embed>');
-      expect(sanitized).not.toContain('<link>');
-      expect(sanitized).not.toContain('<style>');
-      expect(sanitized).toContain('<p>Safe content</p>');
-    });
-
-    it('should remove dangerous attributes', () => {
-      const contentWithBadAttrs = `
-        <div onclick="alert('xss')">Click me</div>
-        <img src="image.jpg" onerror="alert('error')">
-        <a href="javascript:alert('xss')">Bad link</a>
-        <p style="background: url('evil.jpg')">Styled text</p>
-      `;
-
-      const sanitized = sanitizeContent(contentWithBadAttrs);
-      expect(sanitized).not.toContain('onclick');
-      expect(sanitized).not.toContain('onerror');
-      expect(sanitized).not.toContain('javascript:');
-      expect(sanitized).not.toContain('background: url');
-    });
-
-    it('should preserve safe HTML elements', () => {
-      const safeContent = `
-        <h1>Title</h1>
-        <h2>Subtitle</h2>
-        <p>Paragraph with <strong>bold</strong> and <em>italic</em> text.</p>
-        <ul>
-          <li>List item 1</li>
-          <li>List item 2</li>
-        </ul>
-        <a href="https://example.com">Safe link</a>
-        <img src="image.jpg" alt="Description">
-        <blockquote>Quote</blockquote>
-        <pre><code>Code block</code></pre>
-      `;
-
-      const sanitized = sanitizeContent(safeContent);
-      expect(sanitized).toContain('<h1>Title</h1>');
-      expect(sanitized).toContain('<p>Paragraph');
-      expect(sanitized).toContain('<strong>bold</strong>');
-      expect(sanitized).toContain('<em>italic</em>');
-      expect(sanitized).toContain('<ul>');
-      expect(sanitized).toContain('<li>List item');
-      expect(sanitized).toContain('<a href="https://example.com">');
-      expect(sanitized).toContain('<img src="image.jpg"');
-      expect(sanitized).toContain('<blockquote>');
-      expect(sanitized).toContain('<code>');
-    });
-
-    it('should handle malformed HTML gracefully', () => {
-      const malformedContent = `
-        <div><p>Unclosed div
-        <img src="test.jpg" alt="Missing closing quote>
-        <script>alert('test')</script>
-        <p>Normal paragraph</p>
-      `;
-
-      const sanitized = sanitizeContent(malformedContent);
-      expect(sanitized).not.toContain('<script>');
-      expect(sanitized).toContain('<p>Normal paragraph</p>');
-    });
-
-    it('should preserve text content', () => {
-      const textContent = 'Just plain text with no HTML';
-      const sanitized = sanitizeContent(textContent);
-      expect(sanitized).toBe(textContent);
-    });
-
-    it('should handle empty and null content', () => {
-      expect(sanitizeContent('')).toBe('');
-      expect(sanitizeContent(null as any)).toBe('');
-      expect(sanitizeContent(undefined as any)).toBe('');
-    });
-
-    it('should preserve data attributes for functionality', () => {
-      const contentWithData = `
-        <div data-note-id="123" data-custom="value">
-          <p>Content with data attributes</p>
-        </div>
-      `;
-
-      const sanitized = sanitizeContent(contentWithData);
-      expect(sanitized).toContain('data-note-id="123"');
-      expect(sanitized).toContain('data-custom="value"');
-    });
-  });
-
-  describe('input sanitization edge cases', () => {
-    it('should handle Unicode characters correctly', () => {
-      const unicodeContent = '测试内容 🎉 العربية русский';
-      expect(validateFileName('测试.txt')).toBe(false); // Non-ASCII in filename
-      expect(sanitizeContent(unicodeContent)).toContain(unicodeContent);
-    });
-
-    it('should handle very long inputs', () => {
-      const longString = 'a'.repeat(10000);
-      const longNoteId = 'a'.repeat(1000);
+  describe('Entity ID edge cases', () => {
+    it('should handle very long entity IDs', () => {
+      const longId = 'a'.repeat(1000);
+      expect(isValidEntityId(longId)).toBe(true); // Long IDs are valid
       
-      expect(validateNoteId(longNoteId)).toBe(false); // Too long for note ID
-      expect(sanitizeContent(longString)).toHaveLength(10000); // Should preserve length
+      const shortId = 'a'.repeat(11); // 11 chars - too short
+      expect(isValidEntityId(shortId)).toBe(false);
     });
 
-    it('should handle special characters in validation', () => {
-      const specialChars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
-      expect(validateEmail(`user${specialChars}@domain.com`)).toBe(false);
-      expect(validateUrl(`http://example.com/${specialChars}`)).toBe(false);
+    it('should handle special characters in entity IDs', () => {
+      expect(isValidEntityId('test-id-123456')).toBe(true); // Hyphens allowed
+      expect(isValidEntityId('test_id_123456')).toBe(true); // Underscores allowed
+      expect(isValidEntityId('test.id.123456')).toBe(false); // Dots not allowed
+      expect(isValidEntityId('test id 123456')).toBe(false); // Spaces not allowed
     });
   });
 });

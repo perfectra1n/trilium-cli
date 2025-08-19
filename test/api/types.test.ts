@@ -5,25 +5,23 @@ import {
   BranchSchema,
   AttributeSchema,
   AttachmentSchema,
-  SearchResultSchema,
-  BackupSchema,
-} from '@/api/types';
+  CreateNoteDefSchema,
+  UpdateNoteDefSchema,
+} from '@/types/validation';
 
 describe('API Type Schemas', () => {
   describe('NoteSchema', () => {
     it('should validate valid note data', () => {
       const validNote = {
-        noteId: 'test-note-id',
+        ownerId: 'test_owner_123456',
         title: 'Test Note',
-        content: 'Note content',
         type: 'text',
         mime: 'text/html',
         isProtected: false,
-        isDeleted: false,
-        dateCreated: '2023-01-01T00:00:00.000Z',
-        dateModified: '2023-01-01T00:00:00.000Z',
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
+        dateCreated: '2023-01-01 00:00:00.000+0000',
+        dateModified: '2023-01-01 00:00:00.000+0000',
+        utcDateCreated: '2023-01-01 00:00:00.000Z',
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => NoteSchema.parse(validNote)).not.toThrow();
@@ -31,7 +29,7 @@ describe('API Type Schemas', () => {
 
     it('should reject invalid note data', () => {
       const invalidNote = {
-        noteId: '',  // Empty string should be invalid
+        ownerId: '',  // Empty string should be invalid
         title: 'Test Note',
         type: 'invalid-type',  // Invalid type
       };
@@ -41,15 +39,14 @@ describe('API Type Schemas', () => {
 
     it('should handle optional fields', () => {
       const minimalNote = {
-        noteId: 'test-note-id',
+        ownerId: 'test_owner_123456',
         title: 'Test Note',
         type: 'text',
         isProtected: false,
-        isDeleted: false,
-        dateCreated: '2023-01-01T00:00:00.000Z',
-        dateModified: '2023-01-01T00:00:00.000Z',
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
+        dateCreated: '2023-01-01 00:00:00.000+0000',
+        dateModified: '2023-01-01 00:00:00.000+0000',
+        utcDateCreated: '2023-01-01 00:00:00.000Z',
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => NoteSchema.parse(minimalNote)).not.toThrow();
@@ -59,15 +56,13 @@ describe('API Type Schemas', () => {
   describe('BranchSchema', () => {
     it('should validate valid branch data', () => {
       const validBranch = {
-        branchId: 'test-branch-id',
-        noteId: 'test-note-id',
-        parentNoteId: 'parent-note-id',
+        branchId: 'branch_id_123456',
+        ownerId: 'branch_owner_1234',
+        parentNoteId: 'parent_note_1234',
         prefix: '',
         notePosition: 10,
         isExpanded: false,
-        isDeleted: false,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => BranchSchema.parse(validBranch)).not.toThrow();
@@ -75,8 +70,8 @@ describe('API Type Schemas', () => {
 
     it('should reject invalid branch data', () => {
       const invalidBranch = {
-        branchId: '',
-        noteId: 'test-note-id',
+        ownerId: '',
+        noteId: 'test_note_123456',
         // Missing required fields
       };
 
@@ -87,15 +82,14 @@ describe('API Type Schemas', () => {
   describe('AttributeSchema', () => {
     it('should validate label attribute', () => {
       const labelAttribute = {
-        attributeId: 'test-attr-id',
-        noteId: 'test-note-id',
+        attributeId: 'attr_id_123456',
+        ownerId: 'attr_owner_12345',
         type: 'label',
         name: 'priority',
         value: 'high',
-        position: 0,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
-        isDeleted: false,
+        notePosition: 0,
+        isInheritable: false,
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => AttributeSchema.parse(labelAttribute)).not.toThrow();
@@ -103,15 +97,14 @@ describe('API Type Schemas', () => {
 
     it('should validate relation attribute', () => {
       const relationAttribute = {
-        attributeId: 'test-attr-id',
-        noteId: 'test-note-id',
+        attributeId: 'attr_id_234567',
+        ownerId: 'attr_owner_12345',
         type: 'relation',
         name: 'linkTo',
-        value: 'target-note-id',
-        position: 0,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
-        isDeleted: false,
+        value: 'target_note_1234',
+        notePosition: 0,
+        isInheritable: false,
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => AttributeSchema.parse(relationAttribute)).not.toThrow();
@@ -119,15 +112,14 @@ describe('API Type Schemas', () => {
 
     it('should reject invalid attribute type', () => {
       const invalidAttribute = {
-        attributeId: 'test-attr-id',
-        noteId: 'test-note-id',
+        attributeId: 'attr_id_345678',
+        ownerId: 'attr_owner_12345',
         type: 'invalid-type',
         name: 'test',
         value: 'value',
-        position: 0,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
-        isDeleted: false,
+        notePosition: 0,
+        isInheritable: false,
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => AttributeSchema.parse(invalidAttribute)).toThrow();
@@ -137,17 +129,15 @@ describe('API Type Schemas', () => {
   describe('AttachmentSchema', () => {
     it('should validate valid attachment data', () => {
       const validAttachment = {
-        attachmentId: 'test-attachment-id',
-        ownerId: 'owner-note-id',
+        attachmentId: 'attach_id_12345',
+        ownerId: 'attach_owner_123',
         role: 'file',
         mime: 'application/pdf',
         title: 'document.pdf',
-        blobId: 'blob-id',
-        position: 0,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
-        utcDateScheduledForErasureSince: null,
-        isDeleted: false,
+        blobId: 'blob_id_123456',
+        notePosition: 0,
+        dateModified: '2023-01-01 00:00:00.000+0000',
+        utcDateModified: '2023-01-01 00:00:00.000Z',
       };
 
       expect(() => AttachmentSchema.parse(validAttachment)).not.toThrow();
@@ -155,83 +145,44 @@ describe('API Type Schemas', () => {
 
     it('should handle null erasure date', () => {
       const attachment = {
-        attachmentId: 'test-attachment-id',
-        ownerId: 'owner-note-id',
+        attachmentId: 'attach_id_12345',
+        ownerId: 'attach_owner_123',
         role: 'file',
         mime: 'application/pdf',
         title: 'document.pdf',
-        blobId: 'blob-id',
-        position: 0,
-        utcDateCreated: '2023-01-01T00:00:00.000Z',
-        utcDateModified: '2023-01-01T00:00:00.000Z',
-        utcDateScheduledForErasureSince: null,
-        isDeleted: false,
+        blobId: 'blob_id_123456',
+        notePosition: 0,
+        dateModified: '2023-01-01 00:00:00.000+0000',
+        utcDateModified: '2023-01-01 00:00:00.000Z',
+        utcDateScheduledForErasureSince: '2023-01-01 00:00:00.000Z',
       };
 
       const parsed = AttachmentSchema.parse(attachment);
-      expect(parsed.utcDateScheduledForErasureSince).toBeNull();
+      expect(parsed.utcDateScheduledForErasureSince).toBe('2023-01-01 00:00:00.000Z');
     });
   });
 
-  describe('SearchResultSchema', () => {
-    it('should validate search result with all fields', () => {
-      const searchResult = {
-        noteId: 'search-result-note-id',
-        title: 'Found Note',
-        content: 'Matching content...',
+
+  describe('CreateNoteDef and UpdateNoteDef', () => {
+    it('should validate CreateNoteDef', () => {
+      const createDef = {
+        parentNoteId: 'parent_note_1234',
+        title: 'New Note',
         type: 'text',
-        score: 0.85,
-        highlightedTitle: 'Found <mark>Note</mark>',
-        highlightedContent: 'Matching <mark>content</mark>...',
+        content: 'Note content',
       };
 
-      expect(() => SearchResultSchema.parse(searchResult)).not.toThrow();
+      expect(() => CreateNoteDefSchema.parse(createDef)).not.toThrow();
     });
 
-    it('should handle minimal search result', () => {
-      const minimalResult = {
-        noteId: 'search-result-note-id',
-        title: 'Found Note',
-        type: 'text',
-        score: 0.85,
+    it('should validate UpdateNoteDef', () => {
+      const updateDef = {
+        title: 'Updated Title',
+        type: 'code',
+        mime: 'application/javascript',
       };
 
-      expect(() => SearchResultSchema.parse(minimalResult)).not.toThrow();
-    });
-
-    it('should reject invalid score', () => {
-      const invalidResult = {
-        noteId: 'search-result-note-id',
-        title: 'Found Note',
-        type: 'text',
-        score: 1.5, // Score should be between 0 and 1
-      };
-
-      expect(() => SearchResultSchema.parse(invalidResult)).toThrow();
-    });
-  });
-
-  describe('BackupSchema', () => {
-    it('should validate backup metadata', () => {
-      const backup = {
-        name: 'backup-2023-01-01.db',
-        size: 1024000,
-        dateCreated: '2023-01-01T12:00:00.000Z',
-        filePath: '/backups/backup-2023-01-01.db',
-      };
-
-      expect(() => BackupSchema.parse(backup)).not.toThrow();
-    });
-
-    it('should reject negative size', () => {
-      const invalidBackup = {
-        name: 'backup-2023-01-01.db',
-        size: -100,
-        dateCreated: '2023-01-01T12:00:00.000Z',
-        filePath: '/backups/backup-2023-01-01.db',
-      };
-
-      expect(() => BackupSchema.parse(invalidBackup)).toThrow();
+      expect(() => UpdateNoteDefSchema.parse(updateDef)).not.toThrow();
     });
   });
 
@@ -239,41 +190,38 @@ describe('API Type Schemas', () => {
     it('should handle arrays of schemas', () => {
       const notes = [
         {
-          noteId: 'note-1',
+          ownerId: 'note_owner_12345',
           title: 'First Note',
           type: 'text',
           isProtected: false,
-          isDeleted: false,
-          dateCreated: '2023-01-01T00:00:00.000Z',
-          dateModified: '2023-01-01T00:00:00.000Z',
-          utcDateCreated: '2023-01-01T00:00:00.000Z',
-          utcDateModified: '2023-01-01T00:00:00.000Z',
+          dateCreated: '2023-01-01 00:00:00.000+0000',
+          dateModified: '2023-01-01 00:00:00.000+0000',
+          utcDateCreated: '2023-01-01 00:00:00.000Z',
+          utcDateModified: '2023-01-01 00:00:00.000Z',
         },
         {
-          noteId: 'note-2',
+          ownerId: 'note_owner_67890',
           title: 'Second Note',
           type: 'code',
           isProtected: true,
-          isDeleted: false,
-          dateCreated: '2023-01-02T00:00:00.000Z',
-          dateModified: '2023-01-02T00:00:00.000Z',
-          utcDateCreated: '2023-01-02T00:00:00.000Z',
-          utcDateModified: '2023-01-02T00:00:00.000Z',
+          dateCreated: '2023-01-02 00:00:00.000+0000',
+          dateModified: '2023-01-02 00:00:00.000+0000',
+          utcDateCreated: '2023-01-02 00:00:00.000Z',
+          utcDateModified: '2023-01-02 00:00:00.000Z',
         },
       ];
 
-      const NotesArraySchema = z.array(NoteSchema);
-      expect(() => NotesArraySchema.parse(notes)).not.toThrow();
+      const NoteArraySchema = z.array(NoteSchema);
+      expect(() => NoteArraySchema.parse(notes)).not.toThrow();
     });
 
     it('should handle partial updates', () => {
-      const PartialNoteSchema = NoteSchema.partial();
       const partialUpdate = {
         title: 'Updated Title',
-        content: 'Updated content',
+        type: 'code',
       };
 
-      expect(() => PartialNoteSchema.parse(partialUpdate)).not.toThrow();
+      expect(() => UpdateNoteDefSchema.parse(partialUpdate)).not.toThrow();
     });
   });
 });

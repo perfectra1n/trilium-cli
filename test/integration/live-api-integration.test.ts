@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, test } from 'vitest';
 import { TriliumClient } from '../../src/api/client.js';
 import type { Note, NoteWithContent, CreateNoteDef, UpdateNoteDef, Attribute, Branch, SearchResult, AppInfo } from '../../src/types/api.js';
 
@@ -18,8 +18,9 @@ import type { Note, NoteWithContent, CreateNoteDef, UpdateNoteDef, Attribute, Br
  * TRILIUM_TEST_ENABLED=true (to enable these tests)
  */
 
-describe('Live Trilium ETAPI Integration Tests', () => {
-  const isTestEnabled = process.env.TRILIUM_TEST_ENABLED === 'true';
+const isTestEnabled = process.env.TRILIUM_TEST_ENABLED === 'true';
+
+describe.skipIf(!isTestEnabled)('Live Trilium ETAPI Integration Tests', () => {
   const serverUrl = process.env.TRILIUM_SERVER_URL || 'http://localhost:8080';
   const apiToken = process.env.TRILIUM_API_TOKEN || '5c8daC6woEKk_gcRa8O7pPrlMW66XdBBWUNZG7gGUpR8ymhWxNLul0do=';
   
@@ -64,11 +65,6 @@ describe('Live Trilium ETAPI Integration Tests', () => {
   };
 
   beforeAll(async () => {
-    if (!isTestEnabled) {
-      console.log('Live integration tests disabled. Set TRILIUM_TEST_ENABLED=true to enable.');
-      return;
-    }
-
     client = new TriliumClient({
       baseUrl: serverUrl,
       apiToken: apiToken,
@@ -90,23 +86,15 @@ describe('Live Trilium ETAPI Integration Tests', () => {
   });
 
   afterAll(async () => {
-    if (!isTestEnabled) return;
-    
     await cleanupTestData();
     console.log('Live integration test cleanup completed.');
   });
 
   beforeEach(() => {
-    if (!isTestEnabled) {
-      // Skip the test if not enabled - using vitest skip API
-      // @ts-ignore - vitest's skip functionality
-      return;
-    }
+    // Reset test data arrays
   });
 
   afterEach(async () => {
-    if (!isTestEnabled) return;
-    
     // Clean up after each test to prevent interference
     await cleanupTestData();
   });

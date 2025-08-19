@@ -20,12 +20,12 @@ export const useKeyBindings = (bindings: KeyBinding[], state: AppState) => {
 
       // Check modifiers
       if (binding.ctrl && !key.ctrl) continue;
-      if (binding.alt && !(key as any).alt) continue;
+      if (binding.alt && !key.meta) continue;  // ink uses 'meta' for alt key
       if (binding.shift && !key.shift) continue;
       
       // Check if no modifiers should be pressed
       if (!binding.ctrl && key.ctrl) continue;
-      if (!binding.alt && (key as any).alt) continue;
+      if (!binding.alt && key.meta) continue;  // ink uses 'meta' for alt key
       if (!binding.shift && key.shift && binding.key !== binding.key.toUpperCase()) continue;
 
       // Check the actual key

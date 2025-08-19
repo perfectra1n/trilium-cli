@@ -10,6 +10,8 @@ interface TreeViewProps {
   onSelect: (noteId: string) => void;
   onToggleExpand: (noteId: string) => void;
   isLoading?: boolean;
+  focusedIndex: number;
+  flattenedItems: Array<{ item: TreeItem; level: number; noteId: string }>;
 }
 
 export const TreeView: React.FC<TreeViewProps> = ({
@@ -18,28 +20,11 @@ export const TreeView: React.FC<TreeViewProps> = ({
   expandedNodes,
   onSelect,
   onToggleExpand,
-  isLoading
+  isLoading,
+  focusedIndex,
+  flattenedItems
 }) => {
-  const [focusedIndex, setFocusedIndex] = useState(0);
-  const [flatItems, setFlatItems] = useState<Array<{ item: TreeItem; level: number }>>([]);
 
-  // Flatten tree structure for navigation
-  useEffect(() => {
-    const flatten = (items: TreeItem[], level = 0): Array<{ item: TreeItem; level: number }> => {
-      const result: Array<{ item: TreeItem; level: number }> = [];
-      
-      for (const item of items) {
-        result.push({ item, level });
-        if (item.isExpanded && item.children) {
-          result.push(...flatten(item.children, level + 1));
-        }
-      }
-      
-      return result;
-    };
-
-    setFlatItems(flatten(items));
-  }, [items, expandedNodes]);
 
   const renderTreeItem = (item: TreeItem, level: number, isFocused: boolean) => {
     const indent = '  '.repeat(level);
@@ -84,7 +69,7 @@ export const TreeView: React.FC<TreeViewProps> = ({
     );
   }
 
-  if (flatItems.length === 0) {
+  if (flattenedItems.length === 0) {
     return (
       <Box padding={1}>
         <Text dimColor>No notes found</Text>
@@ -98,13 +83,13 @@ export const TreeView: React.FC<TreeViewProps> = ({
         <Text bold color="green">📁 Note Tree</Text>
       </Box>
       <Box flexDirection="column">
-        {flatItems.map(({ item, level }, index) => 
+        {flattenedItems.map(({ item, level }, index) => 
           renderTreeItem(item, level, index === focusedIndex)
         )}
       </Box>
       <Box marginTop={1}>
         <Text dimColor>
-          {flatItems.length} items • Use ↑↓ to navigate • ←→ to expand/collapse • Enter to select
+          {flattenedItems.length} items • Use ↑↓ to navigate • ←→ to expand/collapse • Enter to select
         </Text>
       </Box>
     </Box>

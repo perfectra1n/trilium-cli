@@ -1017,6 +1017,50 @@ export class TriliumClient {
   }
 
   /**
+   * Get all unique tags used across notes
+   * Returns tags with their usage count
+   */
+  async getTags(): Promise<TagInfo[]> {
+    // Search for all notes to get tags
+    const searchResponse = await this.searchNotesAdvanced({ 
+      search: '', 
+      limit: 10000 
+    });
+    
+    const tagMap = new Map<string, number>();
+    
+    // Count tag occurrences
+    for (const note of searchResponse.results) {
+      if (note.attributes) {
+        for (const attr of note.attributes) {
+          if (attr.type === 'label') {
+            const count = tagMap.get(attr.name) || 0;
+            tagMap.set(attr.name, count + 1);
+          }
+        }
+      }
+    }
+    
+    // Convert to TagInfo array
+    const tagInfos: TagInfo[] = [];
+    for (const [name, count] of tagMap.entries()) {
+      const parts = name.split('/');
+      tagInfos.push({
+        name,
+        hierarchy: parts,
+        count,
+        parent: parts.length > 1 ? parts.slice(0, -1).join('/') : undefined,
+        children: [],
+      });
+    }
+    
+    // Sort by count descending
+    tagInfos.sort((a, b) => b.count - a.count);
+    
+    return tagInfos;
+  }
+
+  /**
    * Search notes by tag pattern
    */
   async searchByTags(tagPattern: string, _includeChildren: boolean = false): Promise<SearchResult[]> {
@@ -1114,21 +1158,31 @@ export class TriliumClient {
    */
   async getTemplates(): Promise<Template[]> {
     // Look for notes with #template attribute
-    const templateResults = await this.searchNotes('#template', false, true, 1000);
+    const searchResponse = await this.searchNotesAdvanced({
+      search: '#template',
+      includeArchivedNotes: true,
+      limit: 1000
+    });
+    
     const templates: Template[] = [];
     
-    for (const result of templateResults) {
+    for (const note of searchResponse.results) {
       try {
-        const content = await this.getNoteContent(result.noteId);
-        templates.push({
-          id: result.noteId,
-          title: result.title,
-          content,
-          variables: [], // Would be extracted from content in full implementation
-          description: '',
-        });
+        // Verify the note actually has the template label
+        const hasTemplateLabel = note.attributes?.some(attr => 
+          attr.type === 'label' && attr.name === 'template'
+        ) ?? false;
+        
+        if (hasTemplateLabel) {
+          // Return the template with the expected fields
+          templates.push({
+            noteId: note.noteId,
+            title: note.title,
+            type: note.type
+          });
+        }
       } catch (error) {
-        this.logDebugInfo('getTemplates', `Failed to get template content for note ${result.noteId}: ${error}`);
+        this.logDebugInfo('getTemplates', `Failed to process template note ${note.noteId}: ${error}`);
       }
     }
     
@@ -1140,32 +1194,41 @@ export class TriliumClient {
    */
   async createNoteFromTemplate(
     templateId: EntityId, 
-    variables: Record<string, string>, 
+    overrides: Partial<CreateNoteDef>, 
     parentId: EntityId
-  ): Promise<Note> {
+  ): Promise<{ note: Note; branch: Branch }> {
     const templateContent = await this.getNoteContent(templateId);
     const templateNote = await this.getNote(templateId);
     
-    // Process template variables (would use template utilities in full implementation)
+    // Process template variables if they exist in overrides
     let processedContent = templateContent;
-    let processedTitle = templateNote.title;
+    let processedTitle = overrides.title || templateNote.title;
     
-    // Simple variable substitution - would be enhanced in full implementation
-    for (const [key, value] of Object.entries(variables)) {
-      const placeholder = `{{${key}}}`;
-      processedContent = processedContent.replace(new RegExp(placeholder, 'g'), value);
-      processedTitle = processedTitle.replace(new RegExp(placeholder, 'g'), value);
+    // If overrides contains variables for substitution
+    if (overrides && typeof overrides === 'object') {
+      const variables = (overrides as any).variables;
+      if (variables && typeof variables === 'object') {
+        // Simple variable substitution
+        for (const [key, value] of Object.entries(variables)) {
+          const placeholder = `{{${key}}}`;
+          processedContent = processedContent.replace(new RegExp(placeholder, 'g'), String(value));
+          processedTitle = processedTitle.replace(new RegExp(placeholder, 'g'), String(value));
+        }
+      }
     }
     
     const request: CreateNoteDef = {
       parentNoteId: parentId,
       title: processedTitle,
-      type: templateNote.type,
-      content: processedContent,
+      type: overrides.type || templateNote.type,
+      content: overrides.content || processedContent,
+      mime: overrides.mime || templateNote.mime,
+      notePosition: overrides.notePosition,
+      prefix: overrides.prefix,
+      isExpanded: overrides.isExpanded,
     };
     
-    const result = await this.createNote(request);
-    return result.note;
+    return await this.createNote(request);
   }
 
   /**

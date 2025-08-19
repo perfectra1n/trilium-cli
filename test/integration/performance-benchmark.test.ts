@@ -10,18 +10,15 @@ import type { CreateNoteDef } from '../../src/types/api.js';
  * to establish baseline performance metrics and detect regressions.
  */
 
-describe('Trilium API Performance Benchmarks', () => {
-  const config = getLiveTestConfig();
+const config = getLiveTestConfig();
+
+describe.skipIf(!config.enabled)('Trilium API Performance Benchmarks', () => {
   
   let client: TriliumClient;
   let benchmarkResults: Record<string, any> = {};
   const testNotesCreated: string[] = [];
 
   beforeAll(async () => {
-    if (!config.enabled) {
-      return;
-    }
-
     client = new TriliumClient({
       baseUrl: config.serverUrl,
       apiToken: config.apiToken,
@@ -35,8 +32,6 @@ describe('Trilium API Performance Benchmarks', () => {
   });
 
   afterAll(async () => {
-    if (!config.enabled) return;
-    
     // Cleanup test notes
     for (const noteId of testNotesCreated) {
       try {

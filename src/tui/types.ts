@@ -31,6 +31,8 @@ export interface AppState {
   navigationIndex: number;
   statusMessage: string;
   lastAction: string | null;
+  focusedIndex: number;
+  flattenedItems: Array<{ item: TreeItem; level: number; noteId: string }>;
 }
 
 export interface NavigationState {

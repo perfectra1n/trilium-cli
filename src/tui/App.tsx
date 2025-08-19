@@ -5,12 +5,16 @@ import { Config } from '../config/index.js';
 import type { Note, NoteWithContent, Branch, SearchResult } from '../types/api.js';
 import { TreeView } from './components/TreeView.js';
 import { NoteViewer } from './components/NoteViewer.js';
+import { NoteEditor } from './components/NoteEditor.js';
 import { SearchPanel } from './components/SearchPanel.js';
 import { StatusBar } from './components/StatusBar.js';
 import { HelpPanel } from './components/HelpPanel.js';
 import { CreateNoteDialog } from './components/CreateNoteDialog.js';
 import { AttributeManager } from './components/AttributeManager.js';
 import { CommandPalette } from './components/CommandPalette.js';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
+import { LoadingIndicator, LoadingOverlay } from './components/LoadingIndicator.js';
+import { useRetry } from './hooks/useRetry.js';
 import type { AppState, ViewMode, NavigationState, KeyBinding } from './types.js';
 import { useKeyBindings } from './hooks/useKeyBindings.js';
 import { useNavigation } from './hooks/useNavigation.js';
@@ -49,7 +53,9 @@ export const App: React.FC<AppProps> = ({ config }) => {
     navigationHistory: [],
     navigationIndex: -1,
     statusMessage: 'Ready',
-    lastAction: null
+    lastAction: null,
+    focusedIndex: 0,
+    flattenedItems: []
   });
 
   // Navigation hooks
@@ -63,39 +69,67 @@ export const App: React.FC<AppProps> = ({ config }) => {
     loadTreeStructure();
   }, []);
 
-  const loadTreeStructure = async () => {
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-    try {
-      // Load root note and its children
-      const rootNote = await client.getNote('root');
-      const children = await client.getChildNotes('root');
-      
+  // Use retry mechanism for loading tree structure
+  const treeRetry = useRetry(async () => {
+    // Load root note and its children
+    const rootNote = await client.getNote('root');
+    const children = await client.getChildNotes('root');
+    
+    return {
+      rootNote,
+      children
+    };
+  }, {
+    maxAttempts: 3,
+    delay: 1000,
+    onRetry: (attempt, error) => {
       setState(prev => ({
         ...prev,
-        treeItems: [{
-          noteId: 'root',
-          title: rootNote.title || 'Trilium Notes',
-          type: rootNote.type,
-          isProtected: rootNote.isProtected || false,
-          children: children.map((child: any) => ({
-            noteId: child.noteId,
-            parentNoteId: 'root',
-            title: child.title,
-            type: child.type || 'text',
-            isProtected: child.isProtected || false,
-            hasChildren: true,
-            isExpanded: false
-          })),
-          hasChildren: children.length > 0,
-          isExpanded: true
-        }],
-        isLoading: false
+        statusMessage: `Retrying connection (attempt ${attempt}/3)...`,
+        error: error.message
       }));
+    }
+  });
+
+  const loadTreeStructure = async () => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }));
+    
+    try {
+      const result = await treeRetry.execute();
+      
+      if (result) {
+        const { rootNote, children } = result;
+        
+        setState(prev => ({
+          ...prev,
+          treeItems: [{
+            noteId: 'root',
+            title: rootNote.title || 'Trilium Notes',
+            type: rootNote.type,
+            isProtected: rootNote.isProtected || false,
+            children: children.map((child) => ({
+              noteId: child.noteId,
+              parentNoteId: 'root',
+              title: child.title,
+              type: child.type || 'text',
+              isProtected: child.isProtected || false,
+              hasChildren: true,
+              isExpanded: false,
+              children: []
+            })),
+            hasChildren: children.length > 0,
+            isExpanded: true
+          }],
+          isLoading: false,
+          error: null,
+          statusMessage: 'Tree loaded successfully'
+        }));
+      }
     } catch (error) {
       setState(prev => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : 'Failed to load tree'
+        error: error instanceof Error ? error.message : 'Failed to load tree after multiple attempts'
       }));
     }
   };
@@ -201,9 +235,7 @@ export const App: React.FC<AppProps> = ({ config }) => {
       } else if (input === 'h' || key.leftArrow) {
         navigation.collapseNode();
       } else if (key.return) {
-        if (state.selectedNoteId) {
-          selectNote(state.selectedNoteId);
-        }
+        navigation.selectFocusedItem();
       }
     }
     
@@ -217,39 +249,56 @@ export const App: React.FC<AppProps> = ({ config }) => {
 
   // Render main layout
   return (
+    <ErrorBoundary>
+
     <Box flexDirection="column" height="100%">
       {/* Main content area */}
       <Box flexGrow={1} flexDirection="row">
         {/* Left panel - Tree or Search Results */}
         <Box width="30%" borderStyle="single" flexDirection="column">
-          {state.viewMode === 'search' ? (
-            <SearchPanel
-              results={state.searchResults}
-              query={state.searchQuery}
-              selectedId={state.selectedNoteId}
-              onSelect={selectNote}
-              onSearch={handleSearch}
-            />
-          ) : (
-            <TreeView
-              items={state.treeItems}
-              selectedId={state.selectedNoteId}
-              expandedNodes={state.expandedNodes}
-              onSelect={selectNote}
-              onToggleExpand={navigation.toggleNode}
-              isLoading={state.isLoading}
-            />
-          )}
+          <LoadingOverlay isLoading={state.isLoading && state.treeItems.length === 0} message="Loading tree structure...">
+            {state.viewMode === 'search' ? (
+              <SearchPanel
+                results={state.searchResults}
+                query={state.searchQuery}
+                selectedId={state.selectedNoteId}
+                onSelect={selectNote}
+                onSearch={handleSearch}
+              />
+            ) : (
+              <TreeView
+                items={state.treeItems}
+                selectedId={state.selectedNoteId}
+                expandedNodes={state.expandedNodes}
+                onSelect={selectNote}
+                onToggleExpand={navigation.toggleNode}
+                isLoading={state.isLoading && state.treeItems.length > 0}
+                focusedIndex={state.focusedIndex}
+                flattenedItems={state.flattenedItems}
+              />
+            )}
+          </LoadingOverlay>
         </Box>
 
         {/* Right panel - Note viewer/editor */}
         <Box width="70%" borderStyle="single" flexDirection="column">
           {state.currentNote ? (
             state.viewMode === 'editor' ? (
-              <Box padding={1}>
-                <Text color="yellow">Editor mode - Press ESC to exit</Text>
-                {/* Editor implementation would go here */}
-              </Box>
+              <ErrorBoundary>
+                <NoteEditor
+                  note={state.currentNote}
+                  client={client}
+                  onSave={(updatedNote) => {
+                    setState(prev => ({
+                      ...prev,
+                      currentNote: updatedNote,
+                      statusMessage: 'Note saved successfully'
+                    }));
+                  }}
+                  onCancel={() => switchViewMode('viewer')}
+                  onExit={() => switchViewMode('viewer')}
+                />
+              </ErrorBoundary>
             ) : (
               <NoteViewer
                 note={state.currentNote}
@@ -259,7 +308,11 @@ export const App: React.FC<AppProps> = ({ config }) => {
             )
           ) : (
             <Box padding={1} justifyContent="center" alignItems="center" flexGrow={1}>
-              <Text dimColor>Select a note to view its content</Text>
+              {state.isLoading ? (
+                <LoadingIndicator message="Loading note..." />
+              ) : (
+                <Text dimColor>Select a note to view its content</Text>
+              )}
             </Box>
           )}
         </Box>
@@ -289,8 +342,8 @@ export const App: React.FC<AppProps> = ({ config }) => {
           onClose={() => setState(prev => ({ ...prev, showCreateDialog: false }))}
           onCreated={(noteId) => {
             setState(prev => ({ ...prev, showCreateDialog: false }));
-            selectNote(noteId);
-            loadTreeStructure();
+            void selectNote(noteId);
+            void loadTreeStructure();
           }}
         />
       )}
@@ -313,5 +366,6 @@ export const App: React.FC<AppProps> = ({ config }) => {
         />
       )}
     </Box>
+    </ErrorBoundary>
   );
 };

@@ -1,4 +1,10 @@
 import { vi } from 'vitest';
+import type { Got } from 'got';
+
+// Mock got module at the module level
+vi.mock('got', () => ({
+  default: vi.fn(),
+}));
 
 export interface TestServer {
   url: string;
@@ -15,7 +21,7 @@ let attributeIdCounter = 2000;
 let attachmentIdCounter = 3000;
 
 export async function setupTestServer(): Promise<TestServer> {
-  // Mock the got HTTP client for testing
+  // Get the mocked got module
   const got = await import('got');
   
   const mockHttpClient = {
@@ -242,8 +248,14 @@ export async function setupTestServer(): Promise<TestServer> {
     throw new Error(`Unmocked DELETE endpoint: ${url}`);
   });
 
-  // Replace the got module with our mock
-  vi.mocked(got.default).mockImplementation(mockHttpClient as any);
+  // Configure the mocked got module
+  const mockedGot = got.default as any;
+  
+  // Replace got methods with our mock implementations
+  Object.assign(mockedGot, mockHttpClient);
+  
+  // Also handle got.extend pattern if used
+  mockedGot.extend = vi.fn().mockReturnValue(mockHttpClient);
 
   const testServer: TestServer = {
     url: 'http://localhost:8080',
