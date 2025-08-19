@@ -114,7 +114,3 @@ test-exports/
 
 # npm pack output
 *.tgz
-
-# Temporary minimized configs
-tsconfig.minimal.json
-tsconfig.core.json

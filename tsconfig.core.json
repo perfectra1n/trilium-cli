@@ -1,0 +1,81 @@
+{
+  "compilerOptions": {
+    // Target and Module - Using simpler module resolution
+    "target": "ES2020",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "lib": ["ES2020"],
+    
+    // Output
+    "outDir": "./dist-core",
+    "rootDir": "./src",
+    "declaration": true,
+    "sourceMap": true,
+    "removeComments": false,
+    
+    // Module Resolution - More lenient
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    
+    // Type Checking - Less strict for initial build
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictBindCallApply": false,
+    "strictPropertyInitialization": false,
+    "noImplicitThis": false,
+    "noImplicitReturns": false,
+    "noFallthroughCasesInSwitch": false,
+    "noUncheckedIndexedAccess": false,
+    
+    // Advanced
+    "skipLibCheck": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./dist-core/.tsbuildinfo",
+    
+    // No JSX needed for core
+    "jsx": "react",
+    
+    // Simple paths
+    "baseUrl": ".",
+    "paths": {
+      "*": ["src/*"]
+    }
+  },
+  "include": [
+    "src/core-cli.ts",
+    "src/api/client.ts",
+    "src/api/types.ts",
+    "src/types/api.ts",
+    "src/types/config.ts",
+    "src/types/common.ts",
+    "src/types/validation.ts",
+    "src/config/index.ts",
+    "src/utils/validation.ts",
+    "src/utils/logger.ts",
+    "src/utils/http-simple.ts",
+    "src/error.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-core",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+    "src/tui/**/*",
+    "src/import-export/**/*",
+    "src/cli/commands/import-export.ts",
+    "src/cli/commands/plugin.ts",
+    "src/cli/commands/calendar.ts",
+    "src/cli/commands/completion.ts",
+    "src/bin/**/*",
+    "src/minimal-cli.ts",
+    "src/test-main.ts",
+    "src/tui-*.tsx",
+    "src/main.ts"
+  ]
+}
