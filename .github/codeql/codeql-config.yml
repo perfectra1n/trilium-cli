@@ -1,0 +1,43 @@
+name: "CodeQL Configuration"
+
+# Define the queries to run
+queries:
+  - uses: security-and-quality
+  - uses: security-extended
+
+# Define paths to include/exclude from analysis
+paths:
+  - src
+paths-ignore:
+  - node_modules
+  - dist
+  - dist-core
+  - test
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/test-*.ts"
+
+# Language-specific configuration
+languages:
+  javascript:
+    # Exclude generated files
+    exclude:
+      - "dist/**"
+      - "dist-core/**"
+      - "node_modules/**"
+  typescript:
+    # Include TypeScript files
+    include:
+      - "src/**/*.ts"
+      - "src/**/*.tsx"
+
+# Define custom query suites if needed
+query-filters:
+  - exclude:
+      # Exclude some common false positives for CLI applications
+      id: js/unused-local-variable
+  - exclude:
+      id: js/missing-rate-limiting
+  - exclude:
+      # CLI apps often need to use process.exit
+      id: js/process-exit-in-library

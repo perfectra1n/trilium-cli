@@ -95,9 +95,7 @@ export class Config {
     // Validate profile data
     validateUrl(profile.serverUrl, 'serverUrl');
     
-    if (profile.apiToken && !profile.apiToken.startsWith('etapi')) {
-      throw new ConfigError('API token must start with "etapi"');
-    }
+    // No token format validation - tokens can have various formats
 
     const existingIndex = this.data.profiles.findIndex(p => p.name === profile.name);
     

@@ -1,0 +1,186 @@
+name: Performance
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run performance tests
+        run: npm run test:performance
+        continue-on-error: true
+        env:
+          TRILIUM_SERVER_URL: ${{ secrets.TRILIUM_SERVER_URL }}
+          TRILIUM_API_KEY: ${{ secrets.TRILIUM_API_KEY }}
+
+      - name: Measure build performance
+        run: |
+          echo "## Build Performance" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          # Measure clean build time
+          npm run clean
+          START_TIME=$(date +%s%N)
+          npm run build
+          END_TIME=$(date +%s%N)
+          BUILD_TIME=$((($END_TIME - $START_TIME) / 1000000))
+          echo "Main build time: ${BUILD_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          
+          # Measure minimal build time
+          START_TIME=$(date +%s%N)
+          npm run build:minimal
+          END_TIME=$(date +%s%N)
+          MINIMAL_TIME=$((($END_TIME - $START_TIME) / 1000000))
+          echo "Minimal build time: ${MINIMAL_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          
+          # Measure core build time
+          START_TIME=$(date +%s%N)
+          npm run build:core
+          END_TIME=$(date +%s%N)
+          CORE_TIME=$((($END_TIME - $START_TIME) / 1000000))
+          echo "Core build time: ${CORE_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check bundle size
+        run: |
+          echo "## Bundle Sizes" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          # Get file sizes
+          if [ -d "dist" ]; then
+            echo "Main build:" >> $GITHUB_STEP_SUMMARY
+            du -sh dist/ >> $GITHUB_STEP_SUMMARY
+            find dist -name "*.js" -exec du -h {} \; | sort -rh | head -10 >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -f "dist/minimal-cli.js" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Minimal build:" >> $GITHUB_STEP_SUMMARY
+            du -h dist/minimal-cli.js >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "dist-core" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Core build:" >> $GITHUB_STEP_SUMMARY
+            du -sh dist-core/ >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Memory usage analysis
+        run: |
+          echo "## Memory Usage" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          # Run a simple memory test
+          node --expose-gc -e "
+            const v8 = require('v8');
+            const used = process.memoryUsage();
+            console.log('Memory Usage:');
+            for (let key in used) {
+              console.log(\`  \${key}: \${Math.round(used[key] / 1024 / 1024 * 100) / 100} MB\`);
+            }
+            console.log('');
+            console.log('V8 Heap Statistics:');
+            const heapStats = v8.getHeapStatistics();
+            console.log(\`  Total Heap Size: \${Math.round(heapStats.total_heap_size / 1024 / 1024 * 100) / 100} MB\`);
+            console.log(\`  Used Heap Size: \${Math.round(heapStats.used_heap_size / 1024 / 1024 * 100) / 100} MB\`);
+            console.log(\`  Heap Size Limit: \${Math.round(heapStats.heap_size_limit / 1024 / 1024 * 100) / 100} MB\`);
+          " >> $GITHUB_STEP_SUMMARY
+          
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload performance results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-results
+          path: |
+            test-results/
+            coverage/
+          retention-days: 30
+
+  startup-time:
+    name: Startup Time Analysis
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: |
+          npm run build
+          npm run build:minimal
+          npm run build:core
+
+      - name: Measure startup times
+        run: |
+          echo "## Startup Times (Node ${{ matrix.node-version }})" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          # Measure main CLI startup
+          for i in {1..5}; do
+            START_TIME=$(date +%s%N)
+            node dist/bin/trilium.js --version > /dev/null 2>&1 || true
+            END_TIME=$(date +%s%N)
+            STARTUP_TIME=$((($END_TIME - $START_TIME) / 1000000))
+            echo "Main CLI run $i: ${STARTUP_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Measure minimal CLI startup
+          for i in {1..5}; do
+            START_TIME=$(date +%s%N)
+            node dist/minimal-cli.js --help > /dev/null 2>&1 || true
+            END_TIME=$(date +%s%N)
+            STARTUP_TIME=$((($END_TIME - $START_TIME) / 1000000))
+            echo "Minimal CLI run $i: ${STARTUP_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Measure core CLI startup
+          for i in {1..5}; do
+            START_TIME=$(date +%s%N)
+            node dist-core/core-cli.js --help > /dev/null 2>&1 || true
+            END_TIME=$(date +%s%N)
+            STARTUP_TIME=$((($END_TIME - $START_TIME) / 1000000))
+            echo "Core CLI run $i: ${STARTUP_TIME}ms" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo '```' >> $GITHUB_STEP_SUMMARY

@@ -190,17 +190,6 @@ export class Application {
     
     // API token override
     if (process.env.TRILIUM_API_TOKEN) {
-      if (!process.env.TRILIUM_API_TOKEN.startsWith('etapi')) {
-        const context = new ErrorContext()
-          .withCode('INVALID_ENV_TOKEN')
-          .withOperationContext('Reading TRILIUM_API_TOKEN environment variable')
-          .withSuggestion('Generate a new ETAPI token in Trilium settings')
-          .withSuggestion('Ensure the token starts with \"etapi\"')
-          .withHelpTopic('authentication');
-        
-        throw new ConfigError('TRILIUM_API_TOKEN must start with \"etapi\"').withContext(context);
-      }
-      
       profile.apiToken = process.env.TRILIUM_API_TOKEN;
       this.logger.debug('Applied API token from environment variable');
     }
@@ -241,8 +230,8 @@ export class Application {
       {
         name: 'TRILIUM_API_TOKEN',
         value: process.env.TRILIUM_API_TOKEN,
-        validate: (value: string) => value.startsWith('etapi') && value.length > 10,
-        error: 'Must be a valid ETAPI token starting with "etapi"'
+        validate: (value: string) => value.length > 10,
+        error: 'Must be a valid API token'
       },
       {
         name: 'LOG_LEVEL',
@@ -304,10 +293,7 @@ export class Application {
         validateUrl(profile.serverUrl, 'serverUrl');
       }
       
-      // Validate API token format
-      if (profile.apiToken && !profile.apiToken.startsWith('etapi')) {
-        throw new ConfigError('API token must start with \"etapi\"');
-      }
+      // Token validation removed - tokens can have various formats
       
     } catch (error) {
       const context = new ErrorContext()
@@ -327,7 +313,7 @@ export class Application {
   /**
    * Set up logging based on options
    */
-  private setupLogging(verbose?: boolean): void {
+  public setupLogging(verbose?: boolean): void {
     const logLevel: LogLevel = verbose ? 'debug' : 
                     process.env.LOG_LEVEL ? 
                     (process.env.LOG_LEVEL.toLowerCase() as LogLevel) : 
@@ -437,11 +423,23 @@ export async function createCLIApplication(): Promise<Command> {
   program.hook('preAction', async (thisCommand, actionCommand) => {
     const options = thisCommand.opts() as GlobalOptions;
     
+    // Check if this is the config init command - it doesn't require existing configuration
+    const commandPath = actionCommand.parent ? 
+      `${actionCommand.parent.name()} ${actionCommand.name()}` : 
+      actionCommand.name();
+    const isConfigInit = commandPath === 'config init';
+    
     try {
-      const configResult = await app.initialize(options);
-      if (!configResult.success) {
-        handleApplicationError(configResult.error, app.getLogger());
-        process.exit(configResult.error.getExitCode ? configResult.error.getExitCode() : 1);
+      // Skip initialization for config init command
+      if (!isConfigInit) {
+        const configResult = await app.initialize(options);
+        if (!configResult.success) {
+          handleApplicationError(configResult.error, app.getLogger());
+          process.exit(configResult.error.getExitCode ? configResult.error.getExitCode() : 1);
+        }
+      } else {
+        // For config init, just setup logging
+        app.setupLogging(options.verbose);
       }
       
       // Store app instance for commands to use

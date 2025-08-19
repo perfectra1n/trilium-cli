@@ -1,0 +1,160 @@
+name: PR Checks
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  label:
+    name: Auto Label PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label PR based on files changed
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          configuration-path: .github/labeler.yml
+
+  size:
+    name: PR Size Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add size labels
+        uses: codelytv/pr-size-labeler@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          xs_label: 'size/XS'
+          xs_max_size: 10
+          s_label: 'size/S'
+          s_max_size: 100
+          m_label: 'size/M'
+          m_max_size: 500
+          l_label: 'size/L'
+          l_max_size: 1000
+          xl_label: 'size/XL'
+          message_if_xl: >
+            This PR is quite large. Please consider breaking it down into smaller PRs
+            for easier review and testing.
+
+  pr-title:
+    name: PR Title Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR title
+        uses: amannn/action-semantic-pull-request@v5
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          scopes: |
+            api
+            cli
+            tui
+            config
+            utils
+            types
+            import-export
+            deps
+            tests
+          requireScope: false
+          subjectPattern: ^(?![A-Z]).+$
+          subjectPatternError: |
+            The subject "{subject}" found in the pull request title "{title}"
+            didn't match the configured pattern. Please ensure that the subject
+            doesn't start with an uppercase character.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  welcome:
+    name: Welcome First Time Contributors
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    steps:
+      - name: Welcome message
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `Welcome @${{ github.event.pull_request.user.login }}! 👋
+              
+              Thank you for your contribution to Trilium CLI! This appears to be your first pull request.
+              
+              Our automated checks will run shortly. Please ensure:
+              - All tests pass
+              - Code follows our TypeScript and ESLint conventions
+              - The PR title follows conventional commit format
+              
+              A maintainer will review your PR soon. If you have any questions, feel free to ask!`
+            })
+
+  check-conflicts:
+    name: Check for Merge Conflicts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for conflicts
+        uses: eps1lon/actions-label-merge-conflict@v3
+        with:
+          dirtyLabel: "has conflicts"
+          removeOnDirtyLabel: "ready to merge"
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          commentOnDirty: "This PR has merge conflicts that need to be resolved."
+
+  test-summary:
+    name: Generate Test Summary
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests with summary
+        run: |
+          npm test -- --run --reporter=json > test-results.json || true
+          
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f test-results.json ]; then
+            node -e "
+              const results = require('./test-results.json');
+              const totalTests = results.numTotalTests || 0;
+              const passedTests = results.numPassedTests || 0;
+              const failedTests = results.numFailedTests || 0;
+              const skippedTests = results.numPendingTests || 0;
+              
+              console.log('| Status | Count |');
+              console.log('|--------|-------|');
+              console.log(\`| ✅ Passed | \${passedTests} |\`);
+              console.log(\`| ❌ Failed | \${failedTests} |\`);
+              console.log(\`| ⏭️ Skipped | \${skippedTests} |\`);
+              console.log(\`| **Total** | **\${totalTests}** |\`);
+            " >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Unable to generate test summary" >> $GITHUB_STEP_SUMMARY
+          fi

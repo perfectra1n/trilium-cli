@@ -7,6 +7,7 @@ import type { Profile } from '../../types/config.js';
 import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage, createTriliumClient } from '../../utils/cli.js';
 import { createLogger } from '../../utils/logger.js';
 import { validateUrl } from '../../utils/validation.js';
+import { isInteractive, safePrompt } from '../../utils/interactive.js';
 import type { 
   ProfileListOptions, 
   ProfileCreateOptions, 
@@ -128,10 +129,8 @@ export function setupProfileCommands(program: Command): void {
         
         // Interactive mode if missing required info
         if (!serverUrl || !apiToken) {
-          const inquirer = (await import('inquirer')).default;
-          
           if (!serverUrl) {
-            const { serverUrl: url } = await inquirer.prompt([{
+            const { serverUrl: url } = await safePrompt([{
               type: 'input',
               name: 'serverUrl',
               message: 'Enter Trilium server URL:',
@@ -148,13 +147,12 @@ export function setupProfileCommands(program: Command): void {
           }
           
           if (!apiToken) {
-            const { apiToken: token } = await inquirer.prompt([{
+            const { apiToken: token } = await safePrompt([{
               type: 'password',
               name: 'apiToken',
               message: 'Enter API token:',
               validate: (token: string) => {
                 if (!token.trim()) return 'API token is required';
-                if (!token.startsWith('etapi')) return 'API token must start with "etapi"';
                 return true;
               }
             }]);
@@ -162,7 +160,7 @@ export function setupProfileCommands(program: Command): void {
           }
           
           if (!description) {
-            const { description: desc } = await inquirer.prompt([{
+            const { description: desc } = await safePrompt([{
               type: 'input',
               name: 'description',
               message: 'Enter profile description (optional):',
@@ -175,9 +173,7 @@ export function setupProfileCommands(program: Command): void {
         // Validate inputs
         validateUrl(serverUrl!, 'serverUrl');
         
-        if (!apiToken!.startsWith('etapi')) {
-          throw new ValidationError('API token must start with "etapi"');
-        }
+        // No token format validation - tokens can have various formats
         
         // Create profile
         const profile: Profile = {
@@ -259,8 +255,7 @@ export function setupProfileCommands(program: Command): void {
         
         // Confirmation prompt
         if (!options.force) {
-          const inquirer = (await import('inquirer')).default;
-          const { confirm: answer } = await inquirer.prompt([{
+          const { confirm: answer } = await safePrompt([{
             type: 'confirm',
             name: 'confirm',
             message: `Are you sure you want to remove profile '${name}'?`,

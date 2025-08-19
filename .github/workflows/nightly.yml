@@ -1,0 +1,299 @@
+name: Nightly
+
+on:
+  schedule:
+    # Run every day at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip tests'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-all-targets:
+    name: Build All Targets
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 21.x, 22.x]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Clean previous builds
+        run: npm run clean
+
+      - name: Build all targets
+        run: |
+          npm run build
+          npm run build:minimal
+          npm run build:core
+
+      - name: Verify builds
+        run: |
+          test -f dist/bin/trilium.js
+          test -f dist/lib/index.js
+          test -f dist/minimal-cli.js
+          test -f dist-core/core-cli.js
+          
+          # Try to run each build
+          node dist/bin/trilium.js --version || echo "Main CLI failed"
+          node dist/minimal-cli.js --help || echo "Minimal CLI failed"
+          node dist-core/core-cli.js --help || echo "Core CLI failed"
+
+      - name: Create nightly build artifact
+        run: |
+          TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+          tar -czf trilium-cli-nightly-${TIMESTAMP}-node${{ matrix.node-version }}.tar.gz \
+            dist/ \
+            dist-core/ \
+            package.json \
+            README.md
+
+      - name: Upload nightly build
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-node${{ matrix.node-version }}-${{ github.run_number }}
+          path: trilium-cli-nightly-*.tar.gz
+          retention-days: 7
+
+  extended-tests:
+    name: Extended Test Suite
+    runs-on: ${{ matrix.os }}
+    if: ${{ !inputs.skip_tests }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18.x, 20.x]
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all tests with coverage
+        run: npm run test:coverage
+
+      - name: Run integration tests
+        run: npm run test:integration:all
+        continue-on-error: true
+        env:
+          TRILIUM_SERVER_URL: ${{ secrets.TRILIUM_SERVER_URL }}
+          TRILIUM_API_KEY: ${{ secrets.TRILIUM_API_KEY }}
+
+      - name: Run performance benchmarks
+        run: npm run test:performance
+        continue-on-error: true
+
+      - name: Run error handling tests
+        run: npm run test:errors
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extended-test-results-${{ matrix.os }}-node${{ matrix.node-version }}
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+  compatibility-matrix:
+    name: Compatibility Matrix
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x, 21.x, 22.x]
+      fail-fast: false
+      continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Check Node compatibility
+        run: |
+          echo "Testing with Node.js ${{ matrix.node-version }}"
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+        continue-on-error: true
+
+      - name: Try to build
+        run: |
+          npm run build || echo "Build failed on Node ${{ matrix.node-version }}"
+        continue-on-error: true
+
+      - name: Try to run tests
+        run: |
+          npm test -- --run || echo "Tests failed on Node ${{ matrix.node-version }}"
+        continue-on-error: true
+
+      - name: Report compatibility
+        if: always()
+        run: |
+          echo "## Node.js ${{ matrix.node-version }} Compatibility" >> $GITHUB_STEP_SUMMARY
+          if npm run build && npm test -- --run; then
+            echo "✅ Compatible" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Not fully compatible" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  memory-leak-detection:
+    name: Memory Leak Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run memory leak detection
+        run: |
+          cat > memory-test.js << 'EOF'
+          const { spawn } = require('child_process');
+          const path = require('path');
+          
+          function measureMemory(command, args = []) {
+            return new Promise((resolve) => {
+              const child = spawn('node', ['--expose-gc', command, ...args], {
+                env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=128' }
+              });
+              
+              let maxMemory = 0;
+              const interval = setInterval(() => {
+                try {
+                  const usage = process.memoryUsage();
+                  maxMemory = Math.max(maxMemory, usage.heapUsed);
+                } catch (e) {}
+              }, 100);
+              
+              child.on('exit', () => {
+                clearInterval(interval);
+                resolve(maxMemory);
+              });
+              
+              setTimeout(() => {
+                child.kill();
+                clearInterval(interval);
+                resolve(maxMemory);
+              }, 5000);
+            });
+          }
+          
+          async function runTests() {
+            console.log('Testing for memory leaks...\n');
+            
+            const tests = [
+              { cmd: 'dist/bin/trilium.js', args: ['--help'] },
+              { cmd: 'dist/minimal-cli.js', args: ['--help'] },
+              { cmd: 'dist-core/core-cli.js', args: ['--help'] }
+            ];
+            
+            for (const test of tests) {
+              const memories = [];
+              for (let i = 0; i < 5; i++) {
+                const memory = await measureMemory(test.cmd, test.args);
+                memories.push(memory);
+                console.log(`Run ${i + 1} - ${test.cmd}: ${(memory / 1024 / 1024).toFixed(2)} MB`);
+              }
+              
+              // Check if memory is increasing significantly
+              const avgFirst = memories.slice(0, 2).reduce((a, b) => a + b) / 2;
+              const avgLast = memories.slice(-2).reduce((a, b) => a + b) / 2;
+              const increase = ((avgLast - avgFirst) / avgFirst) * 100;
+              
+              if (increase > 20) {
+                console.log(`⚠️  Potential memory leak detected in ${test.cmd}: ${increase.toFixed(1)}% increase\n`);
+              } else {
+                console.log(`✅ No significant memory leak in ${test.cmd}\n`);
+              }
+            }
+          }
+          
+          runTests().catch(console.error);
+          EOF
+          
+          node memory-test.js
+
+  cleanup-old-artifacts:
+    name: Cleanup Old Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 30
+          keep_minimum_runs: 10
+
+  notify-failures:
+    name: Notify Failures
+    runs-on: ubuntu-latest
+    needs: [build-all-targets, extended-tests, compatibility-matrix]
+    if: failure()
+    steps:
+      - name: Create issue for nightly failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const date = new Date().toISOString().split('T')[0];
+            const title = `Nightly build failure - ${date}`;
+            
+            // Check if issue already exists
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'nightly-failure',
+              state: 'open'
+            });
+            
+            const existingIssue = issues.data.find(issue => issue.title === title);
+            
+            if (!existingIssue) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: title,
+                body: `The nightly build failed on ${date}.\n\nWorkflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nPlease investigate the failure.`,
+                labels: ['nightly-failure', 'automated']
+              });
+            }

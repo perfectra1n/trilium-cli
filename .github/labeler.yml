@@ -1,0 +1,80 @@
+# Add labels to PRs based on file changes
+
+# Component labels
+api:
+  - changed-files:
+    - any-glob-to-any-file: 'src/api/**/*'
+
+cli:
+  - changed-files:
+    - any-glob-to-any-file: 'src/cli/**/*'
+
+tui:
+  - changed-files:
+    - any-glob-to-any-file: 'src/tui/**/*'
+
+config:
+  - changed-files:
+    - any-glob-to-any-file: 'src/config/**/*'
+
+utils:
+  - changed-files:
+    - any-glob-to-any-file: 'src/utils/**/*'
+
+types:
+  - changed-files:
+    - any-glob-to-any-file: 'src/types/**/*'
+
+import-export:
+  - changed-files:
+    - any-glob-to-any-file: 'src/import-export/**/*'
+
+# Test labels
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'test/**/*'
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - '**/*.spec.ts'
+      - 'vitest.config.ts'
+
+# Documentation
+documentation:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '**/*.md'
+      - 'docs/**/*'
+
+# Build and CI
+build:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'tsconfig*.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/**/*'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+
+# Dependencies
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
+
+# Configuration files
+configuration:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'eslint.config.js'
+      - '.gitignore'
+      - 'vitest.config.ts'
+      - 'tsconfig*.json'
