@@ -2,10 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
-import { DirectoryImporter, DirectoryExporter } from '@/import-export/formats/directory';
-import { ObsidianImporter } from '@/import-export/formats/obsidian';
-import { NotionImporter } from '@/import-export/formats/notion';
-import { GitImporter, GitExporter } from '@/import-export/formats/git';
+import { DirectoryImportHandler as DirectoryImporter, DirectoryExportHandler as DirectoryExporter } from '@/import-export/formats/directory';
+import { ObsidianImportHandler as ObsidianImporter } from '@/import-export/formats/obsidian';
+import { NotionImportHandler as NotionImporter } from '@/import-export/formats/notion';
+import { GitSyncHandler as GitImporter, GitSyncHandler as GitExporter } from '@/import-export/formats/git';
 import { TriliumApi } from '@/api/client';
 
 // Mock the API client

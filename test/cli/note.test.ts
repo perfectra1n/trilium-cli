@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Command } from 'commander';
 import { TriliumApi } from '@/api/client';
-import { createNoteCommands } from '@/cli/commands/note';
+import { setupNoteCommands } from '@/cli/commands/note';
 
 // Mock the API client
 vi.mock('@/api/client');
@@ -23,7 +23,7 @@ describe('Note Commands', () => {
     } as any;
 
     program = new Command();
-    createNoteCommands(program, mockApi);
+    setupNoteCommands(program);
   });
 
   afterEach(() => {
