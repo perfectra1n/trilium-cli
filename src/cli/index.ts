@@ -22,6 +22,7 @@ import { setupQuickCommand } from './commands/quick.js';
 import { setupSearchCommands } from './commands/search.js';
 import { setupTagCommands } from './commands/tag.js';
 import { setupTemplateCommands } from './commands/template.js';
+import { setupTUICommand } from './commands/tui.js';
 
 // Import utilities
 import type { BaseCommandOptions } from './types.js';
@@ -34,6 +35,9 @@ export async function setupCommands(program: Command): Promise<void> {
   // Core configuration and profile management
   setupConfigCommands(program);
   setupProfileCommands(program);
+  
+  // Terminal User Interface
+  setupTUICommand(program);
 
   // Note operations
   setupNoteCommands(program);

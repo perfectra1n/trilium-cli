@@ -13,6 +13,11 @@ export interface Profile {
   created?: string;
   lastUsed?: string;
   isDefault?: boolean;
+  settings?: {
+    tuiTheme?: string;
+    vimMode?: boolean;
+    [key: string]: any;
+  };
 }
 
 /**
