@@ -227,7 +227,7 @@ export function setupCompletionCommands(program: Command): void {
             break;
           case 'templates': {
             const templates = await client.getTemplates();
-            data = templates.map(t => `${t.id}:${t.title}`);
+            data = templates.map(t => `${t.noteId}:${t.title}`);
             break;
           }
           case 'tags': {

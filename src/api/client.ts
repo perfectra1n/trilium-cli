@@ -77,20 +77,21 @@ export class TriliumClient {
       ? new RateLimiter(config.rateLimitConfig.maxRequests, config.rateLimitConfig.windowMs)
       : undefined;
 
-    // Construct authorization header - Trilium ETAPI uses raw token, not Bearer format
-    let authHeader = '';
+    // Construct headers - only add Authorization if token is provided
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Only add Authorization header if token is provided (for auth-enabled instances)
     if (validatedConfig.apiToken) {
-      authHeader = validatedConfig.apiToken;
+      headers['Authorization'] = validatedConfig.apiToken;
     }
 
     this.http = new HttpClient({
       baseUrl: `${validatedConfig.baseUrl}/etapi`,
       timeout: validatedConfig.timeout || 30000,
       retries: validatedConfig.retries || 3,
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json',
-      },
+      headers,
       rateLimiter: rateLimiter,
     });
 
@@ -673,6 +674,15 @@ export class TriliumClient {
   }
 
   /**
+   * Get attributes by note ID
+   */
+  async getAttributesByNoteId(noteId: EntityId): Promise<Attribute[]> {
+    validateEntityId(noteId, 'noteId');
+    const note = await this.getNote(noteId);
+    return note.attributes || [];
+  }
+
+  /**
    * Create attribute
    */
   async createAttribute(attributeDef: CreateAttributeDef): Promise<Attribute> {
@@ -1120,6 +1130,38 @@ export class TriliumClient {
     } catch (error) {
       this.logDebugInfo('getTagCloud', `Failed to get tag cloud: ${error}`);
       return [];
+    }
+  }
+
+  /**
+   * Add a tag to a note
+   */
+  async addTag(noteId: EntityId, tagName: string, value: string = ''): Promise<Attribute> {
+    validateEntityId(noteId, 'noteId');
+    return await this.createAttribute({
+      noteId,
+      type: 'label',
+      name: tagName,
+      value,
+    });
+  }
+
+  /**
+   * Remove a tag from a note
+   */
+  async removeTag(noteId: EntityId, tagName: string): Promise<void> {
+    validateEntityId(noteId, 'noteId');
+    
+    // Get all attributes for the note
+    const attributes = await this.getAttributesByNoteId(noteId);
+    
+    // Find the tag attribute to remove
+    const tagAttribute = attributes.find(
+      attr => attr.type === 'label' && attr.name === tagName
+    );
+    
+    if (tagAttribute) {
+      await this.deleteAttribute(tagAttribute.attributeId);
     }
   }
 
@@ -1672,20 +1714,6 @@ export class TriliumClient {
     return results;
   }
 
-  /**
-   * Get tags (placeholder implementation)
-   */
-  async getTags(params?: { pattern?: string }): Promise<Attribute[]> {
-    const query = params?.pattern ? `#tag ${params.pattern}` : '#tag';
-    const searchResponse = await this.searchNotesAdvanced({ search: query });
-    const tags: Attribute[] = [];
-    for (const note of searchResponse.results) {
-      if (note.attributes) {
-        tags.push(...note.attributes.filter(a => a.type === 'label'));
-      }
-    }
-    return tags;
-  }
 
   /**
    * Get note tree (placeholder implementation)

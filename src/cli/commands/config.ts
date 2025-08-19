@@ -198,11 +198,12 @@ export function setupConfigCommands(program: Command): void {
           message: 'Authentication method:',
           choices: [
             { name: 'Use password (recommended) - Will generate an API token for you', value: 'password' },
-            { name: 'Enter existing ETAPI token manually', value: 'token' }
+            { name: 'Enter existing ETAPI token manually', value: 'token' },
+            { name: 'No authentication (server has authentication disabled)', value: 'none' }
           ]
         }]);
         
-        let apiToken: string;
+        let apiToken: string | undefined;
         
         if (authMethod === 'password') {
           // Password-based authentication
@@ -265,7 +266,7 @@ export function setupConfigCommands(program: Command): void {
             
             apiToken = manualToken;
           }
-        } else {
+        } else if (authMethod === 'token') {
           // Manual token entry
           console.log();
           console.log(chalk.gray('You can find your ETAPI token in Trilium:'));
@@ -283,6 +284,12 @@ export function setupConfigCommands(program: Command): void {
           }]);
           
           apiToken = manualToken;
+        } else if (authMethod === 'none') {
+          // No authentication needed
+          console.log();
+          console.log(chalk.yellow('⚠️  No authentication will be used.'));
+          console.log(chalk.gray('Make sure your Trilium server has authentication disabled.'));
+          apiToken = undefined;
         }
         
         console.log();

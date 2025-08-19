@@ -8,7 +8,7 @@
 export interface Profile {
   name: string;
   serverUrl: string;
-  apiToken: string;
+  apiToken?: string;  // Optional for no-auth instances
   description?: string;
   created?: string;
   lastUsed?: string;

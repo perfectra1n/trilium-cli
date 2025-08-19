@@ -5,7 +5,7 @@
  * with built-in variables and comprehensive security validation.
  */
 
-import type { EntityId, Template, TemplateVariable } from '../types/api.js';
+import type { EntityId, Template, TemplateVariable, NoteType } from '../types/api.js';
 
 /**
  * Template variable patterns with security validation
@@ -245,7 +245,8 @@ export function createTemplate(
   const variables = extractTemplateVariables(content, options);
   
   return {
-    id: generateRandomId(16) as EntityId,
+    noteId: generateRandomId(16) as EntityId,
+    type: 'text' as NoteType,
     title,
     content,
     description,
@@ -287,7 +288,7 @@ export function validateTemplate(template: Template): {
   }
   
   // Extract and validate variables
-  const extractedVariables = extractTemplateVariables(template.content, {
+  const extractedVariables = extractTemplateVariables(template.content || '', {
     enableSecurity: true,
     allowBuiltIns: true
   });
@@ -304,7 +305,7 @@ export function validateTemplate(template: Template): {
   }
   
   // Validate defined variables match extracted variables
-  const definedNames = new Set(template.variables.map(v => v.name));
+  const definedNames = new Set((template.variables || []).map(v => v.name));
   const extractedNames = new Set(extractedVariables.filter(v => !v.isBuiltIn).map(v => v.name));
   
   for (const name of extractedNames) {
@@ -336,7 +337,7 @@ export function generateTemplatePreview(
   const usedSampleData: Record<string, string> = {};
   
   // Generate sample data for undefined variables
-  for (const variable of template.variables) {
+  for (const variable of (template.variables || [])) {
     if (!(variable.name in sampleData)) {
       if (variable.defaultValue) {
         usedSampleData[variable.name] = variable.defaultValue;
@@ -348,7 +349,7 @@ export function generateTemplatePreview(
     }
   }
   
-  const result = processTemplate(template.content, usedSampleData, {
+  const result = processTemplate(template.content || '', usedSampleData, {
     allowBuiltIns: true,
     enableSecurity: true,
     preserveUnresolved: false

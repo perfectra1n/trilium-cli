@@ -118,7 +118,7 @@ export function setupTemplateCommands(program: Command): void {
         }
         
         if (options.variables) {
-          const variables = extractTemplateVariables(templateNote.content);
+          const variables = extractTemplateVariables(templateNote.content || '');
           const templateWithVars = { ...templateNote, variables };
           
           const output = formatOutput([templateWithVars], options.output, [
@@ -158,7 +158,7 @@ export function setupTemplateCommands(program: Command): void {
         }
         
         // Extract variables from template
-        const templateVars = extractTemplateVariables(templateNote.content);
+        const templateVars = extractTemplateVariables(templateNote.content || '');
         const variableValues: Record<string, string> = {};
         
         // Parse provided variables
@@ -193,7 +193,7 @@ export function setupTemplateCommands(program: Command): void {
         }
         
         // Apply template with variables
-        const note = await client.createNoteFromTemplate(
+        const result = await client.createNoteFromTemplate(
           (templateNote as any).noteId || (templateNote as any).id || template,
           variableValues,
           options.parent || 'root'
@@ -202,17 +202,17 @@ export function setupTemplateCommands(program: Command): void {
         // Open in editor if requested
         if (options.edit) {
           const { openEditor } = await import('../../utils/editor.js');
-          const editedContent = await openEditor((note as any).content || '');
-          await client.updateNote(note.noteId, { content: editedContent.content } as any);
+          const editedContent = await openEditor((result.note as any).content || '');
+          await client.updateNote(result.note.noteId, { content: editedContent.content } as any);
         }
         
-        const output = formatOutput([note], options.output, [
+        const output = formatOutput([result.note], options.output, [
           'noteId', 'title', 'type', 'parentNoteId'
         ]);
         console.log(output);
         
         if (options.output === 'table') {
-          logger.info(chalk.green(`Note created from template: ${note.noteId}`));
+          logger.info(chalk.green(`Note created from template: ${result.note.noteId}`));
         }
         
       } catch (error) {
@@ -240,7 +240,7 @@ export function setupTemplateCommands(program: Command): void {
         
         if (options.edit) {
           const currentTemplate = await client.getTemplates();
-          const template = currentTemplate.find(t => (t as any).noteId === templateId || t.id === templateId);
+          const template = currentTemplate.find(t => (t as any).noteId === templateId || (t as any).id === templateId);
           const { openEditor } = await import('../../utils/editor.js');
           const editorResult = await openEditor(template?.content || '');
           updates.content = editorResult.content;

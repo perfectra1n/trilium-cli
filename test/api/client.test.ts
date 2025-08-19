@@ -477,16 +477,34 @@ describe('TriliumClient', () => {
       await expect(client.createNote({} as CreateNoteDef)).rejects.toThrow('Invalid CreateNoteDef');
     });
 
-    it.skip('should retry on transient errors - needs integration test', async () => {
-      const sendRequestSpy = vi.spyOn(client as any, 'sendRequest');
-      sendRequestSpy
-        .mockRejectedValueOnce(new Error('Temporary error'))
-        .mockRejectedValueOnce(new Error('Temporary error'))
-        .mockResolvedValueOnce({ noteId: 'test_id_123456', title: 'Test', type: 'text', isProtected: false, dateCreated: '2024-01-01', dateModified: '2024-01-01', utcDateCreated: '2024-01-01T00:00:00Z', utcDateModified: '2024-01-01T00:00:00Z' });
+    it('should retry on transient errors', async () => {
+      // Mock the http client's fetch method to simulate transient errors
+      const httpClient = (client as any).httpClient;
+      const fetchSpy = vi.spyOn(httpClient, 'fetchWithRetry');
+      
+      let callCount = 0;
+      fetchSpy.mockImplementation(async () => {
+        callCount++;
+        if (callCount < 3) {
+          throw new Error('ECONNRESET');
+        }
+        return { 
+          noteId: 'test_id_123456', 
+          title: 'Test', 
+          type: 'text', 
+          isProtected: false, 
+          dateCreated: '2024-01-01', 
+          dateModified: '2024-01-01', 
+          utcDateCreated: '2024-01-01T00:00:00Z', 
+          utcDateModified: '2024-01-01T00:00:00Z' 
+        };
+      });
 
       const result = await client.getNote('test_id_123456');
       expect(result.noteId).toBe('test_id_123456');
-      expect(sendRequestSpy).toHaveBeenCalledTimes(3);
+      expect(callCount).toBe(3); // Should retry twice then succeed
+      
+      fetchSpy.mockRestore();
     });
   });
 
@@ -877,7 +895,7 @@ describe('TriliumClient', () => {
   });
 
   describe('Rate Limiting', () => {
-    it.skip('should respect rate limits - needs integration test', async () => {
+    it('should respect rate limits', async () => {
       const rateLimitedClient = new TriliumClient({
         baseUrl: 'http://localhost:8080',
         apiToken: 'test-token',
