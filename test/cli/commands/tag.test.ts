@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { setupTagCommands } from '../../../src/cli/commands/tag.js';
 import { TriliumClient } from '../../../src/api/client.js';
 import { createLogger } from '../../../src/utils/logger.js';
-import { formatOutput } from '../../../src/utils/cli.js';
+import { formatOutput, createTriliumClient } from '../../../src/utils/cli.js';
 import type { TagInfo, Note, Attribute } from '../../../src/types/api.js';
 
 // Mock dependencies
@@ -51,6 +51,9 @@ describe('Tag Commands', () => {
       warn: vi.fn(),
     };
     vi.mocked(createLogger).mockReturnValue(mockLogger);
+
+    // Mock createTriliumClient to return our mock client
+    vi.mocked(createTriliumClient).mockResolvedValue(mockClient);
 
     // Mock formatOutput
     vi.mocked(formatOutput).mockImplementation((data, format) => {

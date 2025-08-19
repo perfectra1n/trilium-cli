@@ -183,27 +183,279 @@ trilium search --query "#book #status=reading @author=*Tolkien*"
 
 ### Tag Management
 
+#### Listing Tags
+
 ```bash
 # List all tags
 trilium tag list
 
-# Show tag hierarchy
+# Sort tags by name (alphabetical)
+trilium tag list --sort name
+
+# Sort tags by usage count (most used first)
+trilium tag list --sort count
+
+# Output as formatted table (default)
+trilium tag list --format table
+
+# Output as JSON for scripting
+trilium tag list --format json
+
+# Show tag hierarchy/tree structure
 trilium tag list --tree
 
-# Search notes by tag
+# Include usage counts in output
+trilium tag list --counts
+
+# Combine options for detailed sorted list
+trilium tag list --sort count --counts --format table
+```
+
+#### Searching Notes by Tags
+
+```bash
+# Search notes by single tag
 trilium tag search "important"
 
-# Add tag to note
+# Search with multiple tags using AND logic (default)
+trilium tag search "project,urgent"
+trilium tag search "project,urgent" --operator AND
+
+# Search with multiple tags using OR logic
+trilium tag search "personal,work" --operator OR
+
+# Exclude specific tags from search results
+trilium tag search "project" --exclude "archived,draft"
+
+# Complex search with inclusion and exclusion
+trilium tag search "important,work" --exclude "completed,obsolete" --operator AND
+
+# Limit number of search results
+trilium tag search "meeting" --limit 50
+
+# Search with tag hierarchy inclusion
+trilium tag search "project" --include-children
+```
+
+#### Adding Tags to Notes
+
+```bash
+# Add single tag to note
 trilium tag add <noteId> "reviewed"
 
-# Remove tag from note
+# Add multiple tags at once (comma-separated)
+trilium tag add <noteId> "important,project,urgent"
+
+# Add tag with hash prefix (automatically cleaned)
+trilium tag add <noteId> "#meeting-notes"
+
+# Add tags to multiple operations
+trilium tag add note123 "sprint-1,backend,api"
+trilium tag add note456 "frontend,ui,design"
+```
+
+#### Removing Tags from Notes
+
+```bash
+# Remove single tag from note
 trilium tag remove <noteId> "draft"
 
+# Remove multiple tags (comma-separated)
+trilium tag remove <noteId> "old-tag,obsolete,temp"
+
+# Remove all tags from a note
+trilium tag remove <noteId> --all
+
+# Remove tags with hash prefix support
+trilium tag remove <noteId> "#temporary,#test"
+```
+
+#### Tag Management Operations
+
+```bash
 # Rename tag across all notes
 trilium tag rename "old-name" "new-name"
 
-# Show tag statistics
-trilium tag list --counts
+# Preview rename changes without applying them
+trilium tag rename "project-alpha" "project-beta" --dry-run
+
+# Merge source tag into target tag (combines all usages)
+trilium tag merge "temp-tag" "permanent-tag"
+
+# Show comprehensive tag statistics
+trilium tag stats
+
+# Show top N most used tags
+trilium tag stats --top 15
+
+# Tag cloud visualization
+trilium tag cloud
+
+# Tag cloud with minimum frequency filter
+trilium tag cloud --min-count 3 --max-tags 25
+```
+
+#### Advanced Tag Operations
+
+```bash
+# Complex tag search patterns
+trilium tag search "work" --exclude "completed,archived" --limit 100
+
+# Batch tag operations with JSON output for scripting
+trilium tag list --format json | jq '.tags[] | select(.noteCount > 10)'
+
+# Export tag usage statistics
+trilium tag stats --top 50 --output json > tag-report.json
+
+# Find orphaned or rarely used tags
+trilium tag cloud --min-count 1 --max-tags 1000 | grep "(1)"
+```
+
+#### Tag Validation Rules and Limitations
+
+**Tag Name Requirements:**
+- Cannot contain spaces or special characters (`!@#$%^&*()+=[]{};\\':"\\|,.<>/?`)
+- Cannot be empty or exceed 100 characters in length
+- Cannot start with a number (e.g., `123tag` is invalid)
+- Hash prefixes (`#`) are automatically stripped and optional
+- Case-sensitive (e.g., `Important` and `important` are different tags)
+
+**Valid Tag Examples:**
+```bash
+trilium tag add note123 "project-alpha"    # Valid: uses hyphens
+trilium tag add note123 "backend_api"      # Valid: uses underscores  
+trilium tag add note123 "v2"               # Valid: starts with letter
+trilium tag add note123 "URGENT"           # Valid: uppercase letters
+```
+
+**Invalid Tag Examples:**
+```bash
+trilium tag add note123 "my project"       # Invalid: contains spaces
+trilium tag add note123 "tag!"             # Invalid: contains special characters
+trilium tag add note123 "123version"       # Invalid: starts with number
+trilium tag add note123 ""                 # Invalid: empty tag name
+```
+
+**Operational Limits:**
+- Search operations default to 50 results, maximum 1000 with `--limit`
+- Tag merge operations process up to 1000 notes automatically
+- Batch operations handle comma-separated lists up to system limits
+- Tag cloud displays up to 50 tags by default, configurable with `--max-tags`
+
+#### Tag Usage Patterns and Best Practices
+
+**Naming Conventions:**
+```bash
+# Use hierarchical naming for organization
+trilium tag add note123 "project-alpha-backend"
+trilium tag add note456 "project-alpha-frontend"
+trilium tag add note789 "project-beta-docs"
+
+# Use consistent casing
+trilium tag add note123 "urgent,important,work"  # All lowercase
+trilium tag add note456 "CRITICAL,BLOCKER"       # All uppercase for priority
+
+# Use descriptive names
+trilium tag add note123 "meeting-notes-2024"     # Better than "meeting"
+trilium tag add note456 "code-review-backend"    # Better than "review"
+```
+
+**Efficient Tag Management:**
+```bash
+# Regular cleanup - find unused tags
+trilium tag stats --top 1000 | grep "(0 notes)"
+
+# Consolidate similar tags
+trilium tag merge "todo" "task"
+trilium tag merge "docs" "documentation"
+
+# Use tag hierarchy for large collections
+trilium tag list --tree | grep "project-"
+
+# Export tag structure for backup
+trilium tag list --format json > tags-backup.json
+```
+
+**Search Optimization:**
+```bash
+# Use specific tags first in AND operations
+trilium tag search "specific,general" --operator AND
+
+# Use exclusions to narrow results
+trilium tag search "project" --exclude "archived,completed"
+
+# Combine with content search for precision
+trilium search "#urgent AND authentication error"
+```
+
+#### Tag Command Troubleshooting
+
+**Common Issues and Solutions:**
+
+**Error: "Invalid tag name"**
+```bash
+# Problem: Tag contains invalid characters
+trilium tag add note123 "my project"  # FAILS
+
+# Solution: Use valid characters only
+trilium tag add note123 "my-project"  # WORKS
+trilium tag add note123 "my_project"  # WORKS
+```
+
+**Error: "Note not found"**
+```bash
+# Problem: Invalid note ID
+trilium tag add invalid-id "tag"
+
+# Solution: Verify note exists first
+trilium note get <noteId>
+trilium tag add <noteId> "tag"
+```
+
+**Warning: "Note already has tag"**
+```bash
+# This is informational - tag won't be duplicated
+trilium tag add note123 "existing-tag"
+# Output: Warning: Note note123 already has tag "existing-tag"
+```
+
+**No results from tag search**
+```bash
+# Problem: Tag doesn't exist or no notes tagged
+trilium tag search "nonexistent"
+
+# Solution: Check available tags first
+trilium tag list --counts | grep "nonexistent"
+trilium tag stats  # See all tag usage
+```
+
+**Performance Issues with Large Tag Operations:**
+```bash
+# Problem: Slow response with many results
+trilium tag search "common-tag"
+
+# Solution: Use limits and specific searches
+trilium tag search "common-tag" --limit 20
+trilium tag search "common-tag,specific" --operator AND
+```
+
+**Tag Cloud Not Displaying:**
+```bash
+# Problem: No output from tag cloud command
+trilium tag cloud
+
+# Solution: Check minimum count and tag availability
+trilium tag cloud --min-count 1
+trilium tag stats  # Verify tags exist
+```
+
+**Merge Operation Failures:**
+```bash
+# Problem: Some notes fail during tag merge
+trilium tag merge "source" "target"
+
+# Solution: Check individual note permissions and try smaller batches
+trilium tag search "source" --limit 10  # Process in smaller groups
 ```
 
 ### Attachment Operations
