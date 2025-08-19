@@ -439,10 +439,11 @@ export function setupConfigCommands(program: Command): void {
           }))
         };
         
-        const output = formatOutput(displayData, options.output);
+        const outputFormat = options.output || 'table';
+        const output = formatOutput(displayData, outputFormat);
         console.log(output);
         
-        if (options.output === 'table') {
+        if (outputFormat === 'table') {
           logger.info(formatSuccessMessage('Configuration displayed successfully'));
           
           if (profiles.length === 0) {
@@ -514,14 +515,17 @@ export function setupConfigCommands(program: Command): void {
         config.reset();
         await config.save();
         
-        if (options.output === 'table') {
+        // Default to 'table' if output format is not specified
+        const outputFormat = options.output || 'table';
+        
+        if (outputFormat === 'table') {
           logger.info(formatSuccessMessage('Configuration reset to defaults'));
           logger.info(formatWarningMessage('All profiles and custom settings have been removed'));
         } else {
           const output = formatOutput({ 
             success: true, 
             message: 'Configuration reset to defaults' 
-          }, options.output);
+          }, outputFormat);
           console.log(output);
         }
         

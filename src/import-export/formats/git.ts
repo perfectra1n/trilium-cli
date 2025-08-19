@@ -556,6 +556,9 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
         return existingNoteId;
       }
 
+      // Determine parent note ID based on folder structure
+      const parentNoteId = await this.getOrCreateParentNote(file.path, config, context);
+
       // Create or update note
       const noteData = {
         title,
@@ -575,7 +578,7 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
       } else {
         const result = await this.client.createNote({
           ...noteData,
-          parentNoteId: 'root', // TODO: Support folder structure
+          parentNoteId,
         });
         return result.note.noteId;
       }
@@ -770,6 +773,64 @@ export class GitSyncHandler implements SyncHandler<GitConfig> {
     } catch (error) {
       return null;
     }
+  }
+
+  private async getOrCreateParentNote(
+    filePath: string,
+    config: GitConfig,
+    context: OperationContext
+  ): Promise<string> {
+    // Get the directory path relative to repository root
+    const dirPath = dirname(filePath);
+    
+    // If the file is at the root, return 'root'
+    if (dirPath === '.' || dirPath === '') {
+      return 'root';
+    }
+
+    // Check if we already have a note for this directory
+    const existingFolderId = await this.findExistingNoteByPath(dirPath, config);
+    if (existingFolderId) {
+      return existingFolderId;
+    }
+
+    // Build the folder hierarchy
+    const pathParts = dirPath.split('/');
+    let currentParentId = 'root';
+    let currentPath = '';
+
+    for (const part of pathParts) {
+      if (!part) continue; // Skip empty parts
+      
+      currentPath = currentPath ? `${currentPath}/${part}` : part;
+      
+      // Check if this folder note already exists
+      const folderId = await this.findExistingNoteByPath(currentPath, config);
+      
+      if (folderId) {
+        currentParentId = folderId;
+      } else {
+        // Create folder note
+        const folderNote = await this.client.createNote({
+          title: part,
+          content: `# ${part}\n\nFolder for git repository: ${config.repositoryPath}`,
+          type: 'text',
+          mime: 'text/html',
+          parentNoteId: currentParentId,
+        });
+        
+        // Add attributes to the folder note
+        const noteId = folderNote.note.noteId;
+        await this.client.createAttribute({ noteId, type: 'label', name: 'source', value: 'git' });
+        await this.client.createAttribute({ noteId, type: 'label', name: 'git-path', value: currentPath });
+        await this.client.createAttribute({ noteId, type: 'label', name: 'git-repository', value: config.repositoryPath });
+        await this.client.createAttribute({ noteId, type: 'label', name: 'git-folder', value: 'true' });
+        
+        currentParentId = noteId;
+      }
+    }
+
+    return currentParentId;
   }
 
   private async getNoteIdsForExport(config: GitConfig): Promise<string[]> {

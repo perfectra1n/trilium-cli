@@ -173,6 +173,21 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    
+    services:
+      trilium:
+        image: triliumnext/trilium:latest
+        ports:
+          - 8080:8080
+        env:
+          TRILIUM_DATA_DIR: /home/node/trilium-data
+          TRILIUM_PORT: 8080
+        options: >-
+          --health-cmd "curl -f http://localhost:8080/api/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -190,8 +205,8 @@ jobs:
         run: npm run test:integration:all
         continue-on-error: true
         env:
-          TRILIUM_SERVER_URL: ${{ secrets.TRILIUM_SERVER_URL }}
-          TRILIUM_API_KEY: ${{ secrets.TRILIUM_API_KEY }}
+          TRILIUM_SERVER_URL: http://localhost:8080
+          TRILIUM_API_KEY: test_api_key_123
 
       - name: Run error handling tests
         run: npm run test:errors

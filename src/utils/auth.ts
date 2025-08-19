@@ -22,18 +22,18 @@ export interface ETAPITokenResponse {
 }
 
 /**
- * Login to Trilium and get an auth token using username/password
+ * Generate ETAPI token directly using password
+ * Based on the trilium-py implementation
  */
-export async function loginWithPassword(
+export async function generateETAPITokenWithPassword(
   serverUrl: string,
-  credentials: LoginCredentials
+  password: string
 ): Promise<string> {
   try {
-    // Trilium's login endpoint
-    const response = await got.post(`${serverUrl}/api/login/token`, {
-      json: {
-        username: credentials.username || '',
-        password: credentials.password
+    // Trilium's ETAPI login endpoint
+    const response = await got.post(`${serverUrl}/etapi/auth/login`, {
+      form: {
+        password: password
       },
       responseType: 'json',
       throwHttpErrors: false,
@@ -43,10 +43,10 @@ export async function loginWithPassword(
     });
 
     if (response.statusCode === 401) {
-      throw new ApiError('Invalid username or password', 401);
+      throw new ApiError('Invalid password', 401);
     }
 
-    if (response.statusCode !== 200 && response.statusCode !== 201) {
+    if (response.statusCode !== 201) {
       throw new ApiError(
         `Login failed with status ${response.statusCode}`,
         response.statusCode
@@ -70,86 +70,16 @@ export async function loginWithPassword(
 }
 
 /**
- * Get or create an ETAPI token using an auth token
- */
-export async function getOrCreateETAPIToken(
-  serverUrl: string,
-  authToken: string,
-  tokenName: string = 'trilium-cli'
-): Promise<string> {
-  try {
-    // First, try to get existing ETAPI tokens
-    const listResponse = await got.get(`${serverUrl}/etapi/tokens`, {
-      headers: {
-        'Authorization': authToken
-      },
-      responseType: 'json',
-      throwHttpErrors: false,
-      timeout: {
-        request: 10000
-      }
-    });
-
-    if (listResponse.statusCode === 200) {
-      const tokens = listResponse.body as ETAPITokenResponse[];
-      const existingToken = tokens.find(t => t.name === tokenName);
-      if (existingToken && existingToken.token) {
-        return existingToken.token;
-      }
-    }
-
-    // If no existing token, create a new one
-    const createResponse = await got.post(`${serverUrl}/etapi/tokens`, {
-      headers: {
-        'Authorization': authToken
-      },
-      json: {
-        name: tokenName
-      },
-      responseType: 'json',
-      throwHttpErrors: false,
-      timeout: {
-        request: 10000
-      }
-    });
-
-    if (createResponse.statusCode !== 200 && createResponse.statusCode !== 201) {
-      throw new ApiError(
-        `Failed to create ETAPI token with status ${createResponse.statusCode}`,
-        createResponse.statusCode
-      );
-    }
-
-    const data = createResponse.body as ETAPITokenResponse;
-    if (!data.token) {
-      throw new ApiError('No token received from ETAPI token creation');
-    }
-
-    return data.token;
-  } catch (error) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    throw new TriliumError(`Failed to get/create ETAPI token: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-/**
- * Generate ETAPI token using username/password authentication
- * This combines login and token generation into one flow
+ * Generate ETAPI token using password authentication
+ * This is the main function to call for password-based auth
  */
 export async function generateETAPIToken(
   serverUrl: string,
   credentials: LoginCredentials,
   tokenName: string = 'trilium-cli'
 ): Promise<string> {
-  // Step 1: Login with password to get auth token
-  const authToken = await loginWithPassword(serverUrl, credentials);
-  
-  // Step 2: Use auth token to get/create ETAPI token
-  const etapiToken = await getOrCreateETAPIToken(serverUrl, authToken, tokenName);
-  
-  return etapiToken;
+  // Use the password directly to get ETAPI token
+  return generateETAPITokenWithPassword(serverUrl, credentials.password);
 }
 
 /**

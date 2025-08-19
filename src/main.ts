@@ -423,15 +423,16 @@ export async function createCLIApplication(): Promise<Command> {
   program.hook('preAction', async (thisCommand, actionCommand) => {
     const options = thisCommand.opts() as GlobalOptions;
     
-    // Check if this is the config init command - it doesn't require existing configuration
+    // Check if this is a config command that doesn't require existing configuration
     const commandPath = actionCommand.parent ? 
       `${actionCommand.parent.name()} ${actionCommand.name()}` : 
       actionCommand.name();
-    const isConfigInit = commandPath === 'config init';
+    // Config commands and profile commands can run without existing profiles
+    const skipInit = commandPath.startsWith('config ') || commandPath.startsWith('profile ');
     
     try {
-      // Skip initialization for config init command
-      if (!isConfigInit) {
+      // Skip initialization for config init and reset commands
+      if (!skipInit) {
         const configResult = await app.initialize(options);
         if (!configResult.success) {
           handleApplicationError(configResult.error, app.getLogger());

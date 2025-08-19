@@ -64,41 +64,6 @@ export async function setupCommands(program: Command): Promise<void> {
   setupPluginCommands(program);
   setupCompletionCommands(program);
 
-  // TUI command - run interactive interface
-  program
-    .command('tui')
-    .description('Run interactive Terminal User Interface')
-    .option('--theme <theme>', 'TUI theme (default, dark, light)', 'default')
-    .option('--refresh <ms>', 'Refresh interval in milliseconds', (val) => parseInt(val, 10), 5000)
-    .action(async (options: BaseCommandOptions & { theme?: string; refresh?: number }) => {
-      const logger = createLogger(options.verbose);
-      
-      try {
-        // Dynamically import TUI to avoid loading React/Ink in CLI-only usage
-        const { runTUI } = await import('../tui/index.js');
-        const { createCliConfig } = await import('../utils/cli.js');
-        
-        logger.debug('Starting TUI...');
-        
-        const config = await createCliConfig(options.config);
-        
-        const tuiOptions = {
-          ...options,
-          theme: options.theme || 'default',
-          refreshInterval: options.refresh || 5000
-        };
-        
-        await runTUI(config, tuiOptions);
-        
-      } catch (error) {
-        if (error instanceof Error && error.message.includes('Cannot find module')) {
-          logger.error('TUI dependencies not available. Please install with: npm install --include=optional');
-        } else {
-          handleCliError(error, logger);
-        }
-      }
-    });
-
   // Info command - get app/server information
   program
     .command('info')

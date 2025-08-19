@@ -580,7 +580,38 @@ function matchNote(
     }
   }
   
-  // TODO: Add tag and attribute matching when available in note structure
+  // Tag and attribute matching
+  if (note.attributes && note.attributes.length > 0) {
+    // Check for tag matches
+    const tagTerms = query.terms.filter(term => term.startsWith('#'));
+    const attributeTerms = query.terms.filter(term => term.includes('='));
+    
+    for (const tagTerm of tagTerms) {
+      const tagName = tagTerm.substring(1); // Remove # prefix
+      const hasTag = note.attributes.some(attr => 
+        attr.type === 'label' && attr.name === tagName
+      );
+      if (hasTag) {
+        hasMatch = true;
+        totalScore += 1.5; // Higher score for tag matches
+      }
+    }
+    
+    // Check for attribute matches (format: name=value)
+    for (const attrTerm of attributeTerms) {
+      const [attrName, attrValue] = attrTerm.split('=');
+      if (attrName && attrValue) {
+        const hasAttribute = note.attributes.some(attr => 
+          attr.name === attrName && 
+          attr.value?.toLowerCase().includes(attrValue.toLowerCase())
+        );
+        if (hasAttribute) {
+          hasMatch = true;
+          totalScore += 1.5; // Higher score for attribute matches
+        }
+      }
+    }
+  }
   
   return {
     isMatch: hasMatch,

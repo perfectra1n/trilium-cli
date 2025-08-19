@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  trilium:
+    image: triliumnext/trilium:latest
+    container_name: trilium-test
+    restart: unless-stopped
+    environment:
+      - TRILIUM_DATA_DIR=/home/node/trilium-data
+      - TRILIUM_PORT=8080
+      # Set a default password for testing
+      - TRILIUM_INITIAL_PASSWORD=test_password_123
+    volumes:
+      - trilium_test_data:/home/node/trilium-data
+      - ./test/fixtures/trilium-init:/home/node/trilium-init:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    networks:
+      - trilium_test_network
+
+volumes:
+  trilium_test_data:
+    driver: local
+
+networks:
+  trilium_test_network:
+    driver: bridge

@@ -16,17 +16,6 @@ export interface Profile {
 }
 
 /**
- * TUI configuration
- */
-export interface TUIConfig {
-  theme: 'default' | 'dark' | 'light';
-  keyBindings: 'default' | 'vim' | 'emacs';
-  refreshInterval: number;
-  pageSize: number;
-  autoSave: boolean;
-}
-
-/**
  * Import/Export configuration
  */
 export interface ImportExportConfig {
@@ -72,7 +61,6 @@ export interface ConfigData {
   version: string;
   currentProfile?: string;
   profiles: Profile[];
-  tui: TUIConfig;
   importExport: ImportExportConfig;
   editor: EditorConfig;
   logging: LoggingConfig;
@@ -85,13 +73,6 @@ export interface ConfigData {
 export const DEFAULT_CONFIG: ConfigData = {
   version: '1.0.0',
   profiles: [],
-  tui: {
-    theme: 'default' as const,
-    keyBindings: 'default' as const,
-    refreshInterval: 5000,
-    pageSize: 10,
-    autoSave: true,
-  },
   importExport: {
     preserveHierarchy: true,
     handleDuplicates: 'skip' as const,

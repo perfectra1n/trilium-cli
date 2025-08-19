@@ -102,22 +102,25 @@ export async function createTriliumClient(options: BaseCommandOptions): Promise<
  */
 export function formatOutput(
   data: unknown, 
-  format: OutputFormat, 
+  format: OutputFormat = 'table', 
   columns?: string[]
 ): string {
-  if (format === 'json') {
+  // Default to 'table' if format is undefined
+  const outputFormat = format || 'table';
+  
+  if (outputFormat === 'json') {
     return JSON.stringify(data, null, 2);
   }
 
-  if (format === 'plain') {
+  if (outputFormat === 'plain') {
     return formatPlainOutput(data, columns);
   }
 
-  if (format === 'table') {
+  if (outputFormat === 'table') {
     return formatTableOutput(data, columns);
   }
 
-  throw new Error(`Unknown output format: ${format}`);
+  throw new Error(`Unknown output format: ${outputFormat}`);
 }
 
 /**

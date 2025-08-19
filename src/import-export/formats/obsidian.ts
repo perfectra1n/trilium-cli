@@ -469,12 +469,31 @@ export class ObsidianImportHandler implements ImportHandler<ObsidianConfig> {
     // Create folder note if createMissingParents is enabled
     if (config.createMissingParents) {
       try {
+        // Handle nested folders by creating parent hierarchy
+        const parentPath = dirname(folderPath);
+        let parentNoteId = 'root';
+        
+        // If not at root level, ensure parent folder exists
+        if (parentPath && parentPath !== '.' && parentPath !== '') {
+          const parentId = await this.determineParentNote({
+            path: parentPath,
+            name: basename(parentPath),
+            size: 0,
+            fullPath: parentPath,
+            extension: '',
+            depth: 0,
+          }, config, context, noteIdMap);
+          if (parentId) {
+            parentNoteId = parentId;
+          }
+        }
+
         const folderNote = await this.client.createNote({
           title: basename(folderPath),
           content: `# ${basename(folderPath)}\n\nFolder imported from Obsidian vault.`,
           type: 'text',
           mime: 'text/html',
-          parentNoteId: 'root', // TODO: Handle nested folders
+          parentNoteId,
         });
 
         noteIdMap.set(folderPath, folderNote.note.noteId);
