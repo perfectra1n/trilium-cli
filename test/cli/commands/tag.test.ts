@@ -81,9 +81,9 @@ describe('Tag Commands', () => {
   describe('tag list', () => {
     it('should list all tags', async () => {
       const mockTags: TagInfo[] = [
-        { name: 'important', noteCount: 10 },
-        { name: 'todo', noteCount: 5 },
-        { name: 'project', noteCount: 3 },
+        { name: 'important', count: 10, hierarchy: [], children: [] },
+        { name: 'todo', count: 5, hierarchy: [], children: [] },
+        { name: 'project', count: 3, hierarchy: [], children: [] },
       ];
 
       mockClient.getTags.mockResolvedValue(mockTags);
@@ -107,9 +107,9 @@ describe('Tag Commands', () => {
 
     it('should sort tags by name', async () => {
       const mockTags: TagInfo[] = [
-        { name: 'zebra', noteCount: 1 },
-        { name: 'alpha', noteCount: 2 },
-        { name: 'middle', noteCount: 3 },
+        { name: 'zebra', count: 1, hierarchy: [], children: [] },
+        { name: 'alpha', count: 2, hierarchy: [], children: [] },
+        { name: 'middle', count: 3, hierarchy: [], children: [] },
       ];
 
       mockClient.getTags.mockResolvedValue(mockTags);
@@ -122,9 +122,9 @@ describe('Tag Commands', () => {
 
     it('should sort tags by count', async () => {
       const mockTags: TagInfo[] = [
-        { name: 'tag1', noteCount: 5 },
-        { name: 'tag2', noteCount: 10 },
-        { name: 'tag3', noteCount: 3 },
+        { name: 'tag1', count: 5, hierarchy: [], children: [] },
+        { name: 'tag2', count: 10, hierarchy: [], children: [] },
+        { name: 'tag3', count: 3, hierarchy: [], children: [] },
       ];
 
       mockClient.getTags.mockResolvedValue(mockTags);
@@ -137,7 +137,7 @@ describe('Tag Commands', () => {
 
     it('should format tags as JSON', async () => {
       const mockTags: TagInfo[] = [
-        { name: 'tag1', noteCount: 5 },
+        { name: 'tag1', count: 5, hierarchy: [], children: [] },
       ];
 
       mockClient.getTags.mockResolvedValue(mockTags);
@@ -474,9 +474,9 @@ describe('Tag Commands', () => {
   describe('tag stats', () => {
     it('should show tag statistics', async () => {
       const mockTags: TagInfo[] = [
-        { name: 'important', noteCount: 10 },
-        { name: 'todo', noteCount: 5 },
-        { name: 'project', noteCount: 3 },
+        { name: 'important', count: 10, hierarchy: [], children: [] },
+        { name: 'todo', count: 5, hierarchy: [], children: [] },
+        { name: 'project', count: 3, hierarchy: [], children: [] },
       ];
 
       mockClient.getTags.mockResolvedValue(mockTags);
@@ -495,7 +495,9 @@ describe('Tag Commands', () => {
     it('should show top tags', async () => {
       const mockTags: TagInfo[] = Array.from({ length: 20 }, (_, i) => ({
         name: `tag${i}`,
-        noteCount: 20 - i,
+        count: 20 - i,
+        hierarchy: [],
+        children: []
       }));
 
       mockClient.getTags.mockResolvedValue(mockTags);
