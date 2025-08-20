@@ -51,7 +51,7 @@ export function setupTagCommands(program: Command): void {
         if (options.sort === 'name') {
           displayTags = [...tags].sort((a, b) => a.name.localeCompare(b.name));
         } else if (options.sort === 'count') {
-          displayTags = [...tags].sort((a, b) => b.noteCount - a.noteCount);
+          displayTags = [...tags].sort((a, b) => b.count - a.count);
         }
         
         if (options.tree) {
@@ -354,19 +354,19 @@ export function setupTagCommands(program: Command): void {
         
         // Calculate statistics
         const totalTags = tags.length;
-        const totalTaggedNotes = tags.reduce((sum, tag) => sum + tag.noteCount, 0);
+        const totalTaggedNotes = tags.reduce((sum, tag) => sum + tag.count, 0);
         
         console.log(`Total tags: ${totalTags}`);
         console.log(`Total tagged notes: ${totalTaggedNotes}`);
         
         if (options.top && tags.length > 0) {
           // Sort by count and show top N
-          const sortedTags = [...tags].sort((a, b) => b.noteCount - a.noteCount);
+          const sortedTags = [...tags].sort((a, b) => b.count - a.count);
           const topTags = sortedTags.slice(0, options.top);
           
           console.log(`\nTop ${options.top} tags:`);
           topTags.forEach((tag, index) => {
-            console.log(`  ${index + 1}. ${tag.name}: ${tag.noteCount} notes`);
+            console.log(`  ${index + 1}. ${tag.name}: ${tag.count} notes`);
           });
         }
         
@@ -507,9 +507,13 @@ export function setupTagCommands(program: Command): void {
                   value: cleanNewTag
                 });
               } else {
-                // API format: update name
-                await client.updateAttribute(tagAttribute.attributeId, {
-                  name: cleanNewTag
+                // API format: delete old attribute and create new one
+                await client.deleteAttribute(tagAttribute.attributeId);
+                await client.createAttribute({
+                  noteId: note.noteId,
+                  type: 'label',
+                  name: cleanNewTag,
+                  value: ''
                 });
               }
               results.push({ 
