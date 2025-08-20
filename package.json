@@ -76,6 +76,8 @@
     "prepare": "npm run build"
   },
   "dependencies": {
+    "trilium-zod": "file:../trilium-zod",
+    "trilium-tui": "file:../trilium-tui",
     "@clack/prompts": "^0.8.2",
     "@types/marked": "^5.0.2",
     "@types/node": "^20.11.17",

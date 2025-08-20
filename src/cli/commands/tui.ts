@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { launchTUI } from '../../tui/index.js';
+import { launchTUI } from 'trilium-tui';
 import { Config } from '../../config/index.js';
 import { ConfigError } from '../../error.js';
 
@@ -55,8 +55,13 @@ export function setupTUICommand(program: Command): void {
         console.log(chalk.yellow('Press Ctrl+Q to quit, H for help'));
         console.log();
         
-        // Launch the TUI
-        await launchTUI(options.config);
+        // Launch the TUI with configuration
+        const tuiConfig = {
+          serverUrl: profile.serverUrl,
+          apiToken: profile.apiToken,
+          configPath: options.config
+        };
+        await launchTUI(tuiConfig);
         
         // Show exit message
         console.log();
