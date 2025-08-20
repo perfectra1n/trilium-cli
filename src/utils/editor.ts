@@ -4,9 +4,12 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 
 import { TriliumError } from '../error.js';
+import { Config } from '../config/index.js';
 
 import { createLogger } from './logger.js';
 import { isValidArray, getFirstElement, getElementAt, hasContent } from './type-guards.js';
+import { htmlToMarkdown, markdownToHtml, detectContentType } from './markdown.js';
+import { prepareForExternalEditor, resumeAfterExternalEditor, setupSignalHandlers } from './terminal-state.js';
 
 /**
  * Editor configuration options
@@ -16,6 +19,8 @@ export interface EditorOptions {
   wait?: boolean;
   format?: string;
   template?: string;
+  convertHtmlToMarkdown?: boolean;
+  preserveFormat?: boolean;
 }
 
 /**
@@ -39,17 +44,53 @@ export async function openEditor(
   // Determine editor to use
   const editor = getEditor(options.editor);
   
-  // Create temporary file
-  const tempFile = await createTempFile(initialContent, options.format || 'md');
+  // Handle HTML to Markdown conversion if requested
+  let contentToEdit = initialContent;
+  let wasConverted = false;
+  
+  if (options.convertHtmlToMarkdown !== false && !options.preserveFormat) {
+    const contentType = detectContentType(initialContent);
+    if (contentType === 'html') {
+      contentToEdit = htmlToMarkdown(initialContent);
+      wasConverted = true;
+      logger.debug('Converted HTML to Markdown for editing');
+    }
+  }
+  
+  // Create temporary file with appropriate extension
+  const fileExtension = wasConverted ? 'md' : (options.format || 'md');
+  const tempFile = await createTempFile(contentToEdit, fileExtension);
   
   try {
+    // Prepare terminal for external editor
+    prepareForExternalEditor();
+    
+    // Show message to user
+    console.log('\nOpening note in external editor...');
+    console.log(`Editor: ${editor}`);
+    console.log(`Temporary file: ${tempFile}`);
+    if (wasConverted) {
+      console.log('Note: HTML content converted to Markdown for editing');
+    }
+    console.log('');
+    
+    // Setup signal handlers
+    const restoreSignals = setupSignalHandlers();
+    
     // Open editor
     logger.debug(`Opening editor: ${editor}`);
     logger.debug(`Temp file: ${tempFile}`);
     
     const success = await spawnEditor(editor, tempFile, options.wait !== false);
     
+    // Restore signal handlers
+    restoreSignals();
+    
+    // Resume terminal after editor
+    resumeAfterExternalEditor();
+    
     if (!success) {
+      console.log('\nEditor closed without saving or was cancelled');
       return {
         content: initialContent,
         cancelled: true,
@@ -59,10 +100,24 @@ export async function openEditor(
     
     // Read modified content
     const newContent = await fs.readFile(tempFile, 'utf-8');
-    const changed = newContent !== initialContent;
+    
+    // Convert back to HTML if we converted from HTML originally
+    let finalContent = newContent;
+    if (wasConverted && !options.preserveFormat) {
+      finalContent = markdownToHtml(newContent);
+      logger.debug('Converted Markdown back to HTML');
+    }
+    
+    const changed = finalContent !== initialContent;
+    
+    if (changed) {
+      console.log('\nNote saved successfully');
+    } else {
+      console.log('\nNo changes detected');
+    }
     
     return {
-      content: newContent,
+      content: finalContent,
       cancelled: false,
       changed
     };
@@ -71,6 +126,7 @@ export async function openEditor(
     // Clean up temp file
     try {
       await fs.unlink(tempFile);
+      logger.debug('Cleaned up temporary file');
     } catch (error) {
       logger.debug(`Failed to clean up temp file: ${error}`);
     }
@@ -134,6 +190,23 @@ export async function createAndEdit(
 function getEditor(preferredEditor?: string): string {
   if (preferredEditor) {
     return preferredEditor;
+  }
+  
+  // Try to get from config first
+  try {
+    const config = new Config();
+    const profile = config.getCurrentProfile();
+    if (profile?.settings?.editor) {
+      return profile.settings.editor;
+    }
+    // Get global editor config
+    const editorConfig = config.getEditorConfig?.();
+    if (editorConfig?.command) {
+      const args = editorConfig.args || [];
+      return args.length > 0 ? `${editorConfig.command} ${args.join(' ')}` : editorConfig.command;
+    }
+  } catch {
+    // Config not available, continue with environment variables
   }
   
   // Check environment variables
@@ -204,7 +277,8 @@ function spawnEditor(editor: string, filePath: string, wait: boolean = true): Pr
     
     const child = spawn(command, args, {
       stdio: wait ? 'inherit' : 'ignore',
-      detached: !wait
+      detached: !wait,
+      shell: process.platform === 'win32' // Use shell on Windows for better compatibility
     });
     
     if (!wait) {
@@ -218,7 +292,9 @@ function spawnEditor(editor: string, filePath: string, wait: boolean = true): Pr
     });
     
     child.on('error', (error) => {
-      console.error(`Failed to start editor: ${error.message}`);
+      console.error(`\nFailed to start editor: ${error.message}`);
+      console.error('Make sure the editor is installed and available in your PATH');
+      console.error(`You can set a different editor using the EDITOR environment variable`);
       resolve(false);
     });
   });
@@ -372,4 +448,41 @@ export function extractTitle(content: string, format: string = 'markdown'): stri
       return firstLine ? firstLine.trim() : null;
     }
   }
+}
+
+/**
+ * Open note content in external editor with HTML/Markdown conversion
+ * This is a specialized function for editing Trilium notes
+ */
+export async function openNoteInExternalEditor(
+  noteContent: string,
+  noteType: string = 'text',
+  options: EditorOptions = {}
+): Promise<EditorResult> {
+  const logger = createLogger(false);
+  
+  // Get conversion preference from config if not specified
+  let shouldConvert = options.convertHtmlToMarkdown;
+  if (shouldConvert === undefined) {
+    try {
+      const config = new Config();
+      const editorConfig = config.getEditorConfig?.();
+      shouldConvert = editorConfig?.convertHtmlToMarkdown !== false;
+    } catch {
+      shouldConvert = true; // Default to converting
+    }
+  }
+  
+  // Only convert for text/book type notes
+  shouldConvert = shouldConvert && (noteType === 'text' || noteType === 'book');
+  
+  const editorOptions: EditorOptions = {
+    ...options,
+    convertHtmlToMarkdown: shouldConvert,
+    format: shouldConvert ? 'md' : (options.format || 'txt')
+  };
+  
+  logger.debug(`Opening note in external editor. Type: ${noteType}, Convert HTML: ${shouldConvert}`);
+  
+  return openEditor(noteContent, editorOptions);
 }

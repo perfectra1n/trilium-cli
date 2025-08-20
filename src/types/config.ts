@@ -38,6 +38,10 @@ export interface EditorConfig {
   command: string;
   args: string[];
   tempDir?: string;
+  convertHtmlToMarkdown?: boolean;
+  preserveLineBreaks?: boolean;
+  autoSave?: boolean;
+  backupBeforeEdit?: boolean;
 }
 
 /**
@@ -87,6 +91,10 @@ export const DEFAULT_CONFIG: ConfigData = {
   editor: {
     command: process.env.EDITOR || 'nano',
     args: [],
+    convertHtmlToMarkdown: true,
+    preserveLineBreaks: true,
+    autoSave: true,
+    backupBeforeEdit: false,
   },
   logging: {
     level: 'info' as const,

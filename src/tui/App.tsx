@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp, useInput, useStdin, useStdout } from 'ink';
 import { TriliumClient } from '../api/client.js';
 import { Config } from '../config/index.js';
 import type { Note, NoteWithContent, Branch, SearchResult } from '../types/api.js';
@@ -26,6 +26,8 @@ interface AppProps {
 
 export const App: React.FC<AppProps> = ({ config }) => {
   const { exit } = useApp();
+  const { stdin, setRawMode } = useStdin();
+  const { stdout } = useStdout();
   const profile = config.getCurrentProfile();
   
   // Initialize API client
@@ -34,6 +36,43 @@ export const App: React.FC<AppProps> = ({ config }) => {
     apiToken: profile.apiToken,
     debugMode: false
   }), [profile.serverUrl, profile.apiToken]);
+  
+  // Enable mouse support in terminal (if supported)
+  useEffect(() => {
+    // Only enable mouse support if we're in a proper TTY environment
+    if (!stdin || !stdout || !setRawMode || !stdin.isTTY || !stdout.isTTY) {
+      return;
+    }
+    
+    try {
+      // Enable mouse reporting for better terminal interaction
+      const enableMouseSupport = () => {
+        // Enable mouse tracking
+        stdout.write('\x1b[?1000h'); // Enable mouse reporting
+        stdout.write('\x1b[?1002h'); // Enable mouse drag tracking
+        stdout.write('\x1b[?1015h'); // Enable urxvt mouse mode
+        stdout.write('\x1b[?1006h'); // Enable SGR mouse mode
+      };
+      
+      const disableMouseSupport = () => {
+        // Disable mouse tracking
+        stdout.write('\x1b[?1000l');
+        stdout.write('\x1b[?1002l');
+        stdout.write('\x1b[?1015l');
+        stdout.write('\x1b[?1006l');
+      };
+      
+      enableMouseSupport();
+      
+      return () => {
+        disableMouseSupport();
+      };
+    } catch (error) {
+      // Silently ignore errors if mouse support can't be enabled
+      console.debug('Mouse support not available:', error);
+      return;
+    }
+  }, [stdin, stdout, setRawMode]);
 
   // Application state
   const [state, setState] = useState<AppState>({

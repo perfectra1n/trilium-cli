@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Text, useInput, type DOMElement } from 'ink';
 import type { NoteWithContent } from '../../types/api.js';
+import { htmlToMarkdown, detectContentType } from '../../utils/markdown.js';
 
 interface NoteViewerProps {
   note: NoteWithContent;
@@ -32,23 +33,32 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({ note, onEdit, onRefresh 
   const formatContent = useCallback((content: string, type: string): string[] => {
     if (!content) return ['(Empty note)'];
     
-    const lines = content.split('\n');
-    
-    if (type === 'text' || type === 'book') {
-      // For text notes, preserve line breaks and formatting
-      return lines;
+    // For text and HTML notes, convert to markdown for better readability
+    if (type === 'text' || type === 'book' || type === 'render' || type === 'html') {
+      const contentType = detectContentType(content);
+      
+      // Convert HTML to Markdown for better readability in terminal
+      if (contentType === 'html') {
+        const markdown = htmlToMarkdown(content);
+        return markdown.split('\n');
+      } else if (contentType === 'markdown') {
+        // Already markdown, just split into lines
+        return content.split('\n');
+      } else {
+        // Plain text, preserve as is
+        return content.split('\n');
+      }
     } else if (type === 'code') {
       // For code notes, add line numbers
+      const lines = content.split('\n');
       return lines.map((line, i) => `${String(i + 1).padStart(4, ' ')} │ ${line}`);
-    } else if (type === 'render' || type === 'html') {
-      // For HTML/render notes, strip tags for basic display
-      const stripped = content.replace(/<[^>]*>/g, '');
-      return stripped.split('\n');
     } else if (type === 'mermaid') {
       // For mermaid diagrams, show the source
+      const lines = content.split('\n');
       return ['[Mermaid Diagram]', '---', ...lines];
     } else {
-      return lines;
+      // Default: just split into lines
+      return content.split('\n');
     }
   }, []);
 
@@ -73,8 +83,9 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({ note, onEdit, onRefresh 
     setScrollOffset(maxScroll);
   }, [maxScroll]);
 
-  // Handle keyboard input for scrolling
+  // Handle keyboard and mouse input for scrolling
   useInput((input, key) => {
+    // Keyboard scrolling
     if (key.upArrow || input === 'k') {
       scrollUp();
     } else if (key.downArrow || input === 'j') {
@@ -91,6 +102,17 @@ export const NoteViewer: React.FC<NoteViewerProps> = ({ note, onEdit, onRefresh 
       onEdit();
     } else if (input === 'r') {
       onRefresh();
+    }
+    
+    // Mouse wheel scrolling support (if terminal supports it)
+    // Mouse wheel events are typically sent as arrow keys in many terminals
+    // Some terminals send specific escape sequences for mouse wheel
+    if (typeof input === 'string' && input.includes('\x1b[<64;')) {
+      // Scroll up
+      scrollUp(3);
+    } else if (typeof input === 'string' && input.includes('\x1b[<65;')) {
+      // Scroll down
+      scrollDown(3);
     }
   });
 

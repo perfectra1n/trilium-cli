@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text } from 'ink';
+import React, { useEffect, useState, useCallback } from 'react';
+import { Box, Text, useFocus } from 'ink';
 import Spinner from 'ink-spinner';
 import type { TreeItem } from '../types.js';
 
@@ -14,6 +14,75 @@ interface TreeViewProps {
   flattenedItems: Array<{ item: TreeItem; level: number; noteId: string }>;
 }
 
+// Mouse-enabled tree item component
+interface TreeItemComponentProps {
+  item: TreeItem;
+  level: number;
+  isFocused: boolean;
+  isSelected: boolean;
+  onItemClick: (noteId: string) => void;
+  onExpandClick: (noteId: string) => void;
+}
+
+const TreeItemComponent: React.FC<TreeItemComponentProps> = ({
+  item,
+  level,
+  isFocused,
+  isSelected,
+  onItemClick,
+  onExpandClick
+}) => {
+  const indent = '  '.repeat(level);
+  const expandIcon = item.hasChildren ? (item.isExpanded ? '▼' : '▶') : ' ';
+  const typeIcon = getTypeIcon(item.type);
+  
+  // Handle mouse clicks - we'll use a wrapper Box with onClick
+  const handleClick = useCallback(() => {
+    onItemClick(item.noteId);
+  }, [item.noteId, onItemClick]);
+  
+  const handleExpandClick = useCallback((e: any) => {
+    if (item.hasChildren) {
+      // Prevent the item selection when clicking on expand icon
+      e?.stopPropagation?.();
+      onExpandClick(item.noteId);
+    }
+  }, [item.noteId, item.hasChildren, onExpandClick]);
+  
+  return (
+    <Box key={item.noteId}>
+      <Text
+        color={isSelected ? 'blue' : isFocused ? 'yellow' : undefined}
+        bold={isSelected}
+        inverse={isFocused}
+      >
+        {indent}
+        <Text 
+          color={isSelected ? 'blue' : isFocused ? 'yellow' : undefined}
+          bold={isSelected}
+        >
+          {expandIcon}
+        </Text>
+        {` ${typeIcon} ${item.title}`}
+        {item.isProtected && ' 🔒'}
+      </Text>
+    </Box>
+  );
+};
+
+const getTypeIcon = (type: string): string => {
+  switch (type) {
+    case 'text': return '📝';
+    case 'code': return '💻';
+    case 'file': return '📎';
+    case 'image': return '🖼️';
+    case 'search': return '🔍';
+    case 'book': return '📚';
+    case 'render': return '🎨';
+    default: return '📄';
+  }
+};
+
 export const TreeView: React.FC<TreeViewProps> = ({
   items,
   selectedId,
@@ -24,39 +93,29 @@ export const TreeView: React.FC<TreeViewProps> = ({
   focusedIndex,
   flattenedItems
 }) => {
-
+  // Mouse click handlers
+  const handleItemClick = useCallback((noteId: string) => {
+    onSelect(noteId);
+  }, [onSelect]);
+  
+  const handleExpandClick = useCallback((noteId: string) => {
+    onToggleExpand(noteId);
+  }, [onToggleExpand]);
 
   const renderTreeItem = (item: TreeItem, level: number, isFocused: boolean) => {
-    const indent = '  '.repeat(level);
-    const expandIcon = item.hasChildren ? (item.isExpanded ? '▼' : '▶') : ' ';
-    const typeIcon = getTypeIcon(item.type);
     const isSelected = item.noteId === selectedId;
     
     return (
-      <Box key={item.noteId}>
-        <Text
-          color={isSelected ? 'blue' : isFocused ? 'yellow' : undefined}
-          bold={isSelected}
-          inverse={isFocused}
-        >
-          {indent}{expandIcon} {typeIcon} {item.title}
-          {item.isProtected && ' 🔒'}
-        </Text>
-      </Box>
+      <TreeItemComponent
+        key={item.noteId}
+        item={item}
+        level={level}
+        isFocused={isFocused}
+        isSelected={isSelected}
+        onItemClick={handleItemClick}
+        onExpandClick={handleExpandClick}
+      />
     );
-  };
-
-  const getTypeIcon = (type: string): string => {
-    switch (type) {
-      case 'text': return '📝';
-      case 'code': return '💻';
-      case 'file': return '📎';
-      case 'image': return '🖼️';
-      case 'search': return '🔍';
-      case 'book': return '📚';
-      case 'render': return '🎨';
-      default: return '📄';
-    }
   };
 
   if (isLoading) {

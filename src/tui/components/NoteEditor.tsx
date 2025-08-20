@@ -3,6 +3,8 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { NoteWithContent } from '../../types/api.js';
 import type { TriliumClient } from '../../api/client.js';
+import { htmlToMarkdown, markdownToHtml, detectContentType } from '../../utils/markdown.js';
+import { ExternalNoteEditor } from './ExternalNoteEditor.js';
 
 interface NoteEditorProps {
   note: NoteWithContent;
@@ -28,14 +30,29 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [isMarkdownMode, setIsMarkdownMode] = useState(false);
+  const [originalFormat, setOriginalFormat] = useState<'html' | 'markdown' | 'plain'>('plain');
+  const [useExternalEditor, setUseExternalEditor] = useState(false);
 
-  // Split content into lines on mount
+  // Convert content to markdown for editing if it's HTML
   useEffect(() => {
-    const contentLines = (note.content || '').split('\n');
+    let editableContent = note.content || '';
+    const contentType = detectContentType(editableContent);
+    setOriginalFormat(contentType);
+    
+    // Convert HTML to Markdown for easier editing in terminal
+    if (contentType === 'html' && (note.type === 'text' || note.type === 'book')) {
+      editableContent = htmlToMarkdown(editableContent);
+      setIsMarkdownMode(true);
+    } else {
+      setIsMarkdownMode(contentType === 'markdown');
+    }
+    
+    const contentLines = editableContent.split('\n');
     setLines(contentLines);
     setCursorLine(0);
     setCursorCol(0);
-  }, [note.content]);
+  }, [note.content, note.type]);
 
   // Save the note
   const saveNote = useCallback(async () => {
@@ -45,7 +62,16 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     setSaveError(null);
     
     try {
-      const updatedContent = lines.join('\n');
+      let updatedContent = lines.join('\n');
+      
+      // Convert markdown back to HTML if the original was HTML or if we're in markdown mode for a text note
+      if ((originalFormat === 'html' || isMarkdownMode) && (note.type === 'text' || note.type === 'book')) {
+        // Only convert if it's actually markdown content
+        const contentType = detectContentType(updatedContent);
+        if (contentType === 'markdown' || isMarkdownMode) {
+          updatedContent = markdownToHtml(updatedContent);
+        }
+      }
       
       // Update metadata if title changed
       if (title !== note.title) {
@@ -71,7 +97,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       setSaveError(error instanceof Error ? error.message : 'Failed to save note');
       setIsSaving(false);
     }
-  }, [lines, title, note, client, onSave, isDirty]);
+  }, [lines, title, note, client, onSave, isDirty, originalFormat, isMarkdownMode]);
 
   // Handle character input
   const handleCharInput = useCallback((char: string) => {
@@ -141,6 +167,12 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
 
   // Keyboard input handler
   useInput((input, key) => {
+    // Open in external editor
+    if (key.ctrl && input === 'e') {
+      setUseExternalEditor(true);
+      return;
+    }
+    
     // Save shortcut
     if (key.ctrl && input === 's') {
       saveNote();
@@ -227,6 +259,25 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
     });
   };
 
+  // If external editor mode is active, use the external editor component
+  if (useExternalEditor) {
+    return (
+      <ExternalNoteEditor
+        note={note}
+        client={client}
+        onSave={onSave}
+        onCancel={() => {
+          setUseExternalEditor(false);
+          onCancel();
+        }}
+        onExit={() => {
+          setUseExternalEditor(false);
+          onExit();
+        }}
+      />
+    );
+  }
+  
   return (
     <Box flexDirection="column" padding={1} height="100%">
       {/* Header */}
@@ -246,9 +297,14 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
           )}
         </Box>
         
-        {isDirty && (
-          <Text color="yellow">* Modified</Text>
-        )}
+        <Box>
+          {isMarkdownMode && (
+            <Text color="cyan">📝 Markdown Mode</Text>
+          )}
+          {isDirty && (
+            <Text color="yellow"> * Modified</Text>
+          )}
+        </Box>
         
         {saveError && (
           <Text color="red">Error: {saveError}</Text>
@@ -267,7 +323,7 @@ export const NoteEditor: React.FC<NoteEditorProps> = ({
       {/* Footer with shortcuts */}
       <Box marginTop={1}>
         <Text dimColor>
-          Ctrl+S: Save | ESC: Exit | TAB: Switch title/content | 
+          Ctrl+S: Save | Ctrl+E: External Editor | ESC: Exit | TAB: Switch title/content | 
           Line {cursorLine + 1}, Col {cursorCol + 1}
         </Text>
       </Box>

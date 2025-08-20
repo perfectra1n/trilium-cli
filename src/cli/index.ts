@@ -12,6 +12,7 @@ import { setupBranchCommands } from './commands/branch.js';
 import { setupCalendarCommand } from './commands/calendar.js';
 import { setupCompletionCommands } from './commands/completion.js';
 import { setupConfigCommands } from './commands/config.js';
+import { setupEditorCommands } from './commands/editor-config.js';
 import { setupImportExportCommands } from './commands/import-export.js';
 import { setupLinkCommands } from './commands/link.js';
 import { setupNoteCommands } from './commands/note.js';
@@ -35,6 +36,7 @@ export async function setupCommands(program: Command): Promise<void> {
   // Core configuration and profile management
   setupConfigCommands(program);
   setupProfileCommands(program);
+  setupEditorCommands(program);
   
   // Terminal User Interface
   setupTUICommand(program);

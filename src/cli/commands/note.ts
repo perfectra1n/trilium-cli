@@ -51,8 +51,17 @@ export function setupNoteCommands(program: Command): void {
         
         // Open editor if requested or no content provided
         if (options.edit || (!content && !process.stdin.isTTY)) {
-          const { openEditor } = await import('../../utils/editor.js');
-          const editorResult = await openEditor(content);
+          const { openNoteInExternalEditor } = await import('../../utils/editor.js');
+          const editorResult = await openNoteInExternalEditor(
+            content,
+            options.noteType || 'text'
+          );
+          
+          if (editorResult.cancelled) {
+            logger.info('Note creation cancelled');
+            return;
+          }
+          
           content = editorResult.content;
         }
         
@@ -85,11 +94,36 @@ export function setupNoteCommands(program: Command): void {
     .description('Get note by ID')
     .argument('<note-id>', 'note ID')
     .option('-c, --content', 'include content')
-    .action(async (noteId: string, options: NoteGetOptions) => {
+    .option('-e, --edit', 'open in external editor')
+    .action(async (noteId: string, options: NoteGetOptions & { edit?: boolean }) => {
       const logger = createLogger(options.verbose);
       
       try {
         const client = await createTriliumClient(options);
+        
+        // If edit mode, open in external editor
+        if (options.edit) {
+          const note = await client.getNoteWithContent(noteId);
+          const { openNoteInExternalEditor } = await import('../../utils/editor.js');
+          const editorResult = await openNoteInExternalEditor(
+            note.content || '',
+            note.type
+          );
+          
+          if (editorResult.cancelled) {
+            logger.info('Edit cancelled - no changes saved');
+            return;
+          }
+          
+          if (editorResult.changed) {
+            await client.updateNoteContent(noteId, editorResult.content);
+            logger.info(chalk.green('Note updated successfully'));
+          } else {
+            logger.info('No changes made to note');
+          }
+          return;
+        }
+        
         const note = options.content ? 
           await client.getNoteWithOptionalContent(noteId, true) : 
           await client.getNote(noteId);
@@ -127,6 +161,55 @@ export function setupNoteCommands(program: Command): void {
       }
     });
 
+  // Edit note in external editor (dedicated command)
+  noteCommand
+    .command('edit')
+    .description('Edit note in external editor')
+    .argument('<note-id>', 'note ID')
+    .option('--editor <editor>', 'specify editor to use (overrides $EDITOR)')
+    .option('--no-convert', 'do not convert HTML to Markdown')
+    .action(async (noteId: string, options: BaseCommandOptions & { editor?: string; convert?: boolean }) => {
+      const logger = createLogger(options.verbose);
+      
+      try {
+        const client = await createTriliumClient(options);
+        const note = await client.getNoteWithContent(noteId);
+        
+        const { openNoteInExternalEditor } = await import('../../utils/editor.js');
+        const editorResult = await openNoteInExternalEditor(
+          note.content || '',
+          note.type,
+          {
+            editor: options.editor,
+            convertHtmlToMarkdown: options.convert !== false
+          }
+        );
+        
+        if (editorResult.cancelled) {
+          logger.info('Edit cancelled - no changes saved');
+          return;
+        }
+        
+        if (editorResult.changed) {
+          await client.updateNoteContent(noteId, editorResult.content);
+          
+          if (options.output === 'json') {
+            console.log(JSON.stringify({ success: true, noteId, updated: true }, null, 2));
+          } else {
+            logger.info(chalk.green(`Note ${noteId} updated successfully`));
+          }
+        } else {
+          if (options.output === 'json') {
+            console.log(JSON.stringify({ success: true, noteId, updated: false }, null, 2));
+          } else {
+            logger.info('No changes made to note');
+          }
+        }
+      } catch (error) {
+        handleCliError(error, logger);
+      }
+    });
+  
   // Update note
   noteCommand
     .command('update')
@@ -150,8 +233,22 @@ export function setupNoteCommands(program: Command): void {
         } else if (options.edit) {
           // Get current content for editing
           const currentNote = await client.getNoteWithContent(noteId);
-          const { openEditor } = await import('../../utils/editor.js');
-          const editorResult = await openEditor(currentNote.content || '');
+          const { openNoteInExternalEditor } = await import('../../utils/editor.js');
+          const editorResult = await openNoteInExternalEditor(
+            currentNote.content || '',
+            currentNote.type
+          );
+          
+          if (editorResult.cancelled) {
+            logger.info('Note update cancelled');
+            return;
+          }
+          
+          if (!editorResult.changed) {
+            logger.info('No changes made to note');
+            return;
+          }
+          
           updates.content = editorResult.content;
         }
         

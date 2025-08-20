@@ -4,7 +4,7 @@ import path from 'path';
 import Conf from 'conf';
 
 import { ConfigError } from '../error.js';
-import type { ConfigData, Profile } from '../types/config.js';
+import type { ConfigData, Profile, EditorConfig } from '../types/config.js';
 import { DEFAULT_CONFIG } from '../types/config.js';
 import { isValidArray, getFirstElement } from '../utils/type-guards.js';
 import { validateUrl, validateEntityId } from '../utils/validation.js';
@@ -86,6 +86,23 @@ export class Config {
     }
 
     this.data.currentProfile = name;
+  }
+  
+  /**
+   * Get editor configuration
+   */
+  getEditorConfig(): EditorConfig {
+    return this.data.editor || DEFAULT_CONFIG.editor;
+  }
+  
+  /**
+   * Set editor configuration
+   */
+  setEditorConfig(config: Partial<EditorConfig>): void {
+    this.data.editor = {
+      ...this.data.editor,
+      ...config
+    };
   }
 
   /**
