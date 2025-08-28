@@ -38,6 +38,15 @@ export const entityIdSchema = z.string().refine(isValidEntityId, {
 });
 
 /**
+ * Normalize URL by removing trailing slashes
+ * This prevents issues with double slashes when joining paths
+ */
+export function normalizeUrl(url: string): string {
+  // Remove trailing slashes (but keep protocol slashes like https://)
+  return url.replace(/\/+$/, '');
+}
+
+/**
  * Validate URL
  */
 export function validateUrl(url: string, fieldName = 'url'): string {
@@ -46,6 +55,15 @@ export function validateUrl(url: string, fieldName = 'url'): string {
   } catch (error) {
     throw new ValidationError(`Invalid ${fieldName}: must be a valid URL`, fieldName, error as Error);
   }
+}
+
+/**
+ * Validate and normalize URL
+ * Validates that the URL is valid and normalizes it by removing trailing slashes
+ */
+export function validateAndNormalizeUrl(url: string, fieldName = 'url'): string {
+  const validatedUrl = validateUrl(url, fieldName);
+  return normalizeUrl(validatedUrl);
 }
 
 /**

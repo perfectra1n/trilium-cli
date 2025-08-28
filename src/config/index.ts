@@ -7,7 +7,7 @@ import { ConfigError } from '../error.js';
 import type { ConfigData, Profile, EditorConfig } from '../types/config.js';
 import { DEFAULT_CONFIG } from '../types/config.js';
 import { isValidArray, getFirstElement } from '../utils/type-guards.js';
-import { validateUrl, validateEntityId } from '../utils/validation.js';
+import { validateAndNormalizeUrl, validateEntityId } from '../utils/validation.js';
 
 /**
  * Configuration manager for the Trilium CLI
@@ -109,17 +109,23 @@ export class Config {
    * Add or update a profile
    */
   setProfile(profile: Profile): void {
-    // Validate profile data
-    validateUrl(profile.serverUrl, 'serverUrl');
+    // Validate and normalize the server URL to remove trailing slashes
+    const normalizedUrl = validateAndNormalizeUrl(profile.serverUrl, 'serverUrl');
     
     // No token format validation - tokens can have various formats
+
+    // Create profile with normalized URL
+    const normalizedProfile = {
+      ...profile,
+      serverUrl: normalizedUrl
+    };
 
     const existingIndex = this.data.profiles.findIndex(p => p.name === profile.name);
     
     if (existingIndex >= 0) {
-      this.data.profiles[existingIndex] = profile;
+      this.data.profiles[existingIndex] = normalizedProfile;
     } else {
-      this.data.profiles.push(profile);
+      this.data.profiles.push(normalizedProfile);
     }
 
     // Set as current profile if it's the first one or marked as default

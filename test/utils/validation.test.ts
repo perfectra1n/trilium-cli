@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidEntityId, validateEntityId, validateUrl } from '@/utils/validation';
+import { isValidEntityId, validateEntityId, validateUrl, normalizeUrl, validateAndNormalizeUrl } from '@/utils/validation';
 
 describe('Validation Utilities', () => {
   describe('validateEntityId', () => {
@@ -103,6 +103,65 @@ describe('Validation Utilities', () => {
       expect(isValidEntityId('test_id_123456')).toBe(true); // Underscores allowed
       expect(isValidEntityId('test.id.123456')).toBe(false); // Dots not allowed
       expect(isValidEntityId('test id 123456')).toBe(false); // Spaces not allowed
+    });
+  });
+
+  describe('URL Normalization', () => {
+    describe('normalizeUrl', () => {
+      it('should remove trailing slashes from URLs', () => {
+        expect(normalizeUrl('https://example.com/')).toBe('https://example.com');
+        expect(normalizeUrl('https://example.com//')).toBe('https://example.com');
+        expect(normalizeUrl('https://example.com///')).toBe('https://example.com');
+      });
+
+      it('should handle URLs without trailing slashes', () => {
+        expect(normalizeUrl('https://example.com')).toBe('https://example.com');
+        expect(normalizeUrl('http://localhost:8080')).toBe('http://localhost:8080');
+      });
+
+      it('should handle URLs with paths and trailing slashes', () => {
+        expect(normalizeUrl('https://example.com/trilium/')).toBe('https://example.com/trilium');
+        expect(normalizeUrl('https://example.com/app/trilium/')).toBe('https://example.com/app/trilium');
+        expect(normalizeUrl('http://localhost:8080/path/')).toBe('http://localhost:8080/path');
+      });
+
+      it('should handle URLs with ports', () => {
+        expect(normalizeUrl('https://example.com:3000/')).toBe('https://example.com:3000');
+        expect(normalizeUrl('http://localhost:8080/')).toBe('http://localhost:8080');
+      });
+    });
+
+    describe('validateAndNormalizeUrl', () => {
+      it('should validate and normalize valid URLs', () => {
+        expect(validateAndNormalizeUrl('https://example.com/')).toBe('https://example.com');
+        expect(validateAndNormalizeUrl('http://localhost:8080/')).toBe('http://localhost:8080');
+        expect(validateAndNormalizeUrl('https://my-server.local:3000/app/')).toBe('https://my-server.local:3000/app');
+      });
+
+      it('should throw error for invalid URLs', () => {
+        expect(() => validateAndNormalizeUrl('not-a-url')).toThrow();
+        expect(() => validateAndNormalizeUrl('')).toThrow();
+      });
+    });
+
+    describe('URL joining in API context', () => {
+      it('should prevent double slashes in API paths', () => {
+        // Test various combinations
+        const testCases = [
+          { base: 'https://example.com/', expected: 'https://example.com' },
+          { base: 'https://example.com', expected: 'https://example.com' },
+          { base: 'https://example.com/app/', expected: 'https://example.com/app' },
+          { base: 'https://example.com/app', expected: 'https://example.com/app' },
+        ];
+
+        testCases.forEach(({ base, expected }) => {
+          const normalized = normalizeUrl(base);
+          expect(normalized).toBe(expected);
+          // Ensure no double slashes except after protocol
+          const withoutProtocol = normalized.replace(/^https?:\/\//, '');
+          expect(withoutProtocol).not.toContain('//');
+        });
+      });
     });
   });
 });

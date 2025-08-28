@@ -1,0 +1,41 @@
+{
+  "name": "@trilium-cli/zod",
+  "version": "0.1.0",
+  "description": "Zod schemas for Trilium ETAPI",
+  "keywords": [
+    "trilium",
+    "zod",
+    "validation",
+    "schemas",
+    "etapi"
+  ],
+  "author": "Your Name <you@example.com>",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "typescript": "^5.3.3"
+  }
+}

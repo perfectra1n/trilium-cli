@@ -9,7 +9,7 @@ import type { Profile } from '../../types/config.js';
 import { formatOutput, handleCliError, formatSuccessMessage, formatWarningMessage, createTriliumClient } from '../../utils/cli.js';
 import { openFile } from '../../utils/editor.js';
 import { createLogger } from '../../utils/logger.js';
-import { validateUrl } from '../../utils/validation.js';
+import { validateUrl, normalizeUrl } from '../../utils/validation.js';
 import { isInteractive, safePrompt, ensureRawMode } from '../../utils/interactive.js';
 import type { 
   ConfigShowOptions, 

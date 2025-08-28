@@ -67,10 +67,16 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "packages/**/*"
+  ],
+  "references": [
+    { "path": "./packages/trilium-zod" },
+    { "path": "./packages/trilium-tui" }
   ],
   "ts-node": {
     "esm": true,
     "experimentalSpecifierResolution": "node"
-  }
+  },
+  "composite": false
 }

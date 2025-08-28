@@ -2,7 +2,13 @@
 export * from './api.js';
 export * from './config.js';
 export * from './common.js';
-export * from './validation.js';
+// Don't re-export validation.js as it duplicates exports from api.js
+// Export specific things from validation if needed
+export {
+  SearchOptionsSchema,
+  ApiClientConfigSchema,
+  validateApiClientConfig
+} from './validation.js';
 
 // Re-export CLI types except SearchOptions to avoid conflict
 export type { 

@@ -1,6 +1,9 @@
 {
   "name": "trilium-cli-ts",
   "version": "0.1.0",
+  "workspaces": [
+    "packages/*"
+  ],
   "description": "A TypeScript CLI and TUI client for Trilium Notes",
   "keywords": [
     "trilium",
@@ -37,7 +40,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc && chmod +x dist/bin/trilium.js",
+    "build:packages": "npm run build --workspaces",
+    "build": "npm run build:packages && tsc && chmod +x dist/bin/trilium.js",
     "build:watch": "tsc --watch",
     "build:minimal": "tsc -p tsconfig.minimal.json && chmod +x dist/minimal-cli.js",
     "build:core": "tsc -p tsconfig.core.json && chmod +x dist-core/core-cli.js",
@@ -76,6 +80,8 @@
     "prepare": "npm run build"
   },
   "dependencies": {
+    "@trilium-cli/zod": "file:./packages/trilium-zod",
+    "@trilium-cli/tui": "file:./packages/trilium-tui",
     "@clack/prompts": "^0.8.2",
     "@types/marked": "^5.0.2",
     "@types/node": "^20.11.17",

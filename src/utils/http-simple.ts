@@ -67,8 +67,8 @@ export class HttpClient {
   private rateLimiter?: RateLimiter;
 
   constructor(config: HttpClientConfig) {
-    // Ensure baseUrl has trailing slash for proper URL joining
-    this.baseUrl = config.baseUrl.endsWith('/') ? config.baseUrl : config.baseUrl + '/';
+    // Normalize baseUrl by removing trailing slashes to prevent double slashes
+    this.baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.headers = config.headers || {};
     this.timeout = config.timeout || 30000;
     this.retries = config.retries || 3;
@@ -84,8 +84,9 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     if (options.searchParams) {
       Object.entries(options.searchParams).forEach(([key, value]) => {
         fullUrl.searchParams.set(key, String(value));
@@ -110,8 +111,9 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'POST',
       headers: {
@@ -134,8 +136,9 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'PUT',
       headers: {
@@ -158,8 +161,9 @@ export class HttpClient {
   ): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'PATCH',
       headers: {
@@ -179,8 +183,9 @@ export class HttpClient {
   async delete<T = unknown>(url: string): Promise<T> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'DELETE',
       headers: this.headers,
@@ -196,8 +201,9 @@ export class HttpClient {
   async getText(url: string): Promise<string> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
 
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'GET',
@@ -213,8 +219,9 @@ export class HttpClient {
   async download(url: string): Promise<Buffer> {
     await this.rateLimiter?.waitIfNeeded();
 
-    // Properly join baseUrl and path to avoid URL constructor issues with absolute paths
-    const fullUrl = new URL(this.baseUrl + (url.startsWith('/') ? url.slice(1) : url));
+    // Join baseUrl and path with proper slash handling
+    const path = url.startsWith('/') ? url : `/${url}`;
+    const fullUrl = new URL(`${this.baseUrl}${path}`);
     const response = await this.fetchWithRetry(fullUrl.toString(), {
       method: 'GET',
       headers: this.headers,
