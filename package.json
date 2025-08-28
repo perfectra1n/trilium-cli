@@ -101,7 +101,7 @@
     "got": "^14.2.1",
     "gray-matter": "^4.0.3",
     "ink": "^4.4.1",
-    "ink-select-input": "^5.0.0",
+    "ink-select-input": "^6.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^5.0.1",
     "inquirer": "^9.2.15",
