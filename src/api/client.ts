@@ -40,7 +40,7 @@ import {
   validateQuickCaptureRequest,
   NoteSchema,
   SearchOptionsSchema,
-} from 'trilium-zod';
+} from '../types/validation.js';
 import { HttpClient, RateLimiter } from '../utils/http-simple.js';
 import { isValidArray, getFirstElement } from '../utils/type-guards.js';
 import { validateEntityId, validateUrl } from '../utils/validation.js';

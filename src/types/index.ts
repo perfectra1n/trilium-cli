@@ -2,57 +2,7 @@
 export * from './api.js';
 export * from './config.js';
 export * from './common.js';
-// Re-export only validation functions from trilium-zod (types come from api.js)
-export {
-  // Schemas
-  EntityIdSchema,
-  StringIdSchema,
-  LocalDateTimeSchema,
-  UtcDateTimeSchema,
-  DateSchema,
-  MonthSchema,
-  YearSchema,
-  NoteTypeSchema,
-  AttributeTypeSchema,
-  ExportFormatSchema,
-  OrderDirectionSchema,
-  MimeTypeSchema,
-  NoteSchema,
-  CreateNoteDefSchema,
-  UpdateNoteDefSchema,
-  BranchSchema,
-  CreateBranchDefSchema,
-  UpdateBranchDefSchema,
-  AttributeSchema,
-  CreateAttributeDefSchema,
-  UpdateAttributeDefSchema,
-  AttachmentSchema,
-  CreateAttachmentDefSchema,
-  SearchNotesParamsSchema,
-  SearchOptionsSchema,
-  LoginRequestSchema,
-  LoginResponseSchema,
-  TemplateVariableSchema,
-  TemplateSchema,
-  QuickCaptureRequestSchema,
-  ApiClientConfigSchema,
-  TriliumApiErrorResponseSchema,
-  // Validation functions
-  validateEntityId,
-  validateNote,
-  validateCreateNoteDef,
-  validateUpdateNoteDef,
-  validateSearchNotesParams,
-  validateApiClientConfig,
-  validateQuickCaptureRequest,
-  // Type guards
-  isEntityId,
-  isNoteType,
-  isAttributeType,
-  isValidDate,
-  isValidMonth,
-  isValidYear
-} from 'trilium-zod';
+export * from './validation.js';
 
 // Re-export CLI types except SearchOptions to avoid conflict
 export type { 
