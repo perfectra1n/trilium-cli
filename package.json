@@ -89,7 +89,7 @@
     "adm-zip": "^0.5.10",
     "chalk": "^5.3.0",
     "commander": "^12.0.0",
-    "conf": "^12.0.0",
+    "conf": "^14.0.0",
     "console-table-printer": "^2.12.1",
     "date-fns": "^3.3.1",
     "dotenv": "^16.4.1",
