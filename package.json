@@ -83,7 +83,7 @@
     "@trilium-cli/zod": "file:./packages/trilium-zod",
     "@trilium-cli/tui": "file:./packages/trilium-tui",
     "@clack/prompts": "^0.8.2",
-    "@types/marked": "^5.0.2",
+    "@types/marked": "^6.0.0",
     "@types/node": "^20.11.17",
     "@types/react": "^18.3.23",
     "adm-zip": "^0.5.10",
