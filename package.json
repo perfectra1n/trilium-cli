@@ -84,7 +84,7 @@
     "@trilium-cli/tui": "file:./packages/trilium-tui",
     "@clack/prompts": "^0.8.2",
     "@types/marked": "^5.0.2",
-    "@types/node": "^20.11.17",
+    "@types/node": "^22.0.0",
     "@types/react": "^18.3.23",
     "adm-zip": "^0.5.10",
     "chalk": "^5.3.0",
