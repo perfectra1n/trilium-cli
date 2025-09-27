@@ -49,8 +49,8 @@ export function setupNoteCommands(program: Command): void {
         
         let content = options.content || '';
         
-        // Open editor if requested or no content provided
-        if (options.edit || (!content && !process.stdin.isTTY)) {
+        // Open editor if explicitly requested
+        if (options.edit) {
           const { openNoteInExternalEditor } = await import('../../utils/editor.js');
           const editorResult = await openNoteInExternalEditor(
             content,
@@ -505,17 +505,18 @@ export function setupNoteCommands(program: Command): void {
   // Clone note
   noteCommand
     .command('clone')
-    .description('Clone note')
+    .description('Clone note to another location')
     .argument('<note-id>', 'note ID to clone')
+    .argument('<parent-id>', 'target parent note ID')
     .option('-t, --clone-type <type>', 'clone type (deep, shallow)', 'deep')
-    .action(async (noteId: string, options: NoteCloneOptions) => {
+    .action(async (noteId: string, parentId: string, options: NoteCloneOptions) => {
       const logger = createLogger(options.verbose);
-      
+
       try {
         const client = await createTriliumClient(options);
-        
-        // For now, cloning creates another branch to root
-        const result = await client.cloneNote(noteId, 'root');
+
+        // Clone the note to the specified parent
+        const result = await client.cloneNote(noteId, parentId);
         
         const output = formatOutput([{
           originalNoteId: noteId,

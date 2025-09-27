@@ -66,12 +66,16 @@ export function setupBranchCommands(program: Command): void {
         const branches = await client.getNoteBranches(noteId);
 
         const output = formatOutput(branches, options.output, [
-          'branchId', 'noteId', 'parentNoteId', 'position', 'prefix', 'isExpanded'
+          'branchId', 'parentNoteId', 'parentTitle', 'notePosition', 'prefix', 'isExpanded'
         ]);
         console.log(output);
-        
-        if (options.output === 'table' && branches.length === 0) {
-          logger.info(chalk.yellow('No branches found for this note.'));
+
+        if (options.output === 'table') {
+          if (branches.length === 0) {
+            logger.info(chalk.yellow('No branches found for this note.'));
+          } else if (branches.length > 1) {
+            logger.info(chalk.cyan(`This note is cloned and appears in ${branches.length} locations.`));
+          }
         }
       } catch (error) {
         handleCliError(error, logger);

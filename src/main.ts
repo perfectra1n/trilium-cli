@@ -165,7 +165,13 @@ export class Application {
    */
   private async applyEnvironmentOverrides(): Promise<void> {
     if (!this.config) return;
-    
+
+    // Skip environment overrides if no profiles are configured
+    const profiles = this.config.getProfiles();
+    if (profiles.length === 0) {
+      return;
+    }
+
     const profile = this.config.getCurrentProfile();
     
     // Validate all environment variables first
@@ -265,7 +271,13 @@ export class Application {
    */
   private applyCLIOverrides(options: GlobalOptions): void {
     if (!this.config) return;
-    
+
+    // Skip CLI overrides if no profiles are configured
+    const profiles = this.config.getProfiles();
+    if (profiles.length === 0) {
+      return;
+    }
+
     const profile = this.config.getCurrentProfile();
     
     if (options.serverUrl) {
@@ -284,7 +296,13 @@ export class Application {
    */
   private async validateConfiguration(): Promise<void> {
     if (!this.config) return;
-    
+
+    // Skip validation if no profiles are configured
+    const profiles = this.config.getProfiles();
+    if (profiles.length === 0) {
+      return;
+    }
+
     try {
       const profile = this.config.getCurrentProfile();
       

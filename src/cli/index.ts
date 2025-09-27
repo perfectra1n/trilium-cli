@@ -24,6 +24,7 @@ import { setupSearchCommands } from './commands/search.js';
 import { setupTagCommands } from './commands/tag.js';
 import { setupTemplateCommands } from './commands/template.js';
 import { setupTUICommand } from './commands/tui.js';
+import { setupOrganizeCommands } from './commands/organize.js';
 
 // Import utilities
 import type { BaseCommandOptions } from './types.js';
@@ -58,6 +59,9 @@ export async function setupCommands(program: Command): Promise<void> {
   // Analysis and navigation
   setupLinkCommands(program);
   setupTagCommands(program);
+
+  // Organization helpers
+  setupOrganizeCommands(program);
 
   // Utility operations
   setupBackupCommand(program);

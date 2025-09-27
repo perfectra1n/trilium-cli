@@ -1,4 +1,4 @@
-import { ApiError, AuthError, ValidationError } from '../error.js';
+import { ApiError, AuthError, ValidationError, NotFoundError } from '../error.js';
 import type {
   Note,
   NoteWithContent,
@@ -241,33 +241,163 @@ export class TriliumClient {
       // Enhanced error handling for specific Trilium API errors
       if (error instanceof ApiError) {
         const operation = `${method} ${url}`;
+
+        // Try to parse the actual error response for better details
+        let actualErrorMessage = error.message;
+        let errorCode = '';
+        let errorDetails = '';
+
+        if (error.response) {
+          try {
+            const errorObj = JSON.parse(error.response);
+            if (errorObj.message) {
+              actualErrorMessage = errorObj.message;
+            }
+            if (errorObj.code) {
+              errorCode = errorObj.code;
+            }
+            if (errorObj.details) {
+              errorDetails = errorObj.details;
+            }
+          } catch {
+            // If not JSON, use the raw response text
+            actualErrorMessage = error.response || error.message;
+          }
+        }
+
         const comprehensiveMessage = this.createComprehensiveErrorMessage(
-          operation, 
-          error.status || 0, 
-          error.message
+          operation,
+          error.status || 0,
+          actualErrorMessage
         );
-        
+
         // Handle specific error types
         switch (error.status) {
           case 401:
             throw new AuthError(comprehensiveMessage);
           case 400:
-            // Enhance PROPERTY_NOT_ALLOWED errors with specific guidance
-            if (error.message.includes('PROPERTY_NOT_ALLOWED')) {
-              let enhancedMsg = comprehensiveMessage;
-              enhancedMsg += '\n\nTroubleshooting PROPERTY_NOT_ALLOWED errors:';
-              enhancedMsg += '\n• Only use valid UpdateNoteDef fields: title, type, mime, isProtected';
-              enhancedMsg += '\n• Avoid read-only properties: noteId, dateCreated, dateModified, etc.';
-              enhancedMsg += '\n• Check JSON field naming (use "type" not "noteType")';
-              enhancedMsg += '\n• Enable debug mode to see the exact request payload';
-              throw new ValidationError(enhancedMsg);
-            } else {
-              throw new ValidationError(comprehensiveMessage);
+            // Extract more specific error information for validation errors
+            let validationMessage = comprehensiveMessage;
+
+            // Check for specific Trilium error codes and messages
+            if (errorCode === 'NOTE_ALREADY_HAS_BRANCH' || actualErrorMessage.includes('already has a branch') || actualErrorMessage.includes('already exists in')) {
+              validationMessage = `Cannot create branch: Note already exists in the target location.\n\n`;
+              validationMessage += 'This note is already present in the parent you specified.\n';
+              validationMessage += '\nOptions:\n';
+              validationMessage += '• If you want to move it, first remove it from other locations\n';
+              validationMessage += '• Use "trilium branch list <noteId>" to see all current locations\n';
+              validationMessage += '• Use "trilium branch delete <branchId>" to remove from specific locations';
+            } else if (errorCode === 'CANNOT_MOVE_TO_DESCENDANT' || actualErrorMessage.includes('descendant')) {
+              validationMessage = `Cannot move note: Would create a circular reference.\n\n`;
+              validationMessage += 'You cannot move a note to be inside one of its own descendants.\n';
+              validationMessage += 'This would create an infinite loop in the tree structure.';
+            } else if (actualErrorMessage.includes('PROPERTY_NOT_ALLOWED') || errorCode === 'PROPERTY_NOT_ALLOWED') {
+              validationMessage += '\n\nTroubleshooting PROPERTY_NOT_ALLOWED errors:';
+              validationMessage += '\n• Only use valid UpdateNoteDef fields: title, type, mime, isProtected';
+              validationMessage += '\n• Avoid read-only properties: noteId, dateCreated, dateModified, etc.';
+              validationMessage += '\n• Check JSON field naming (use "type" not "noteType")';
+              validationMessage += '\n• Enable debug mode to see the exact request payload';
+            } else if (actualErrorMessage.includes('NOTE_IS_PROTECTED') || errorCode === 'NOTE_IS_PROTECTED') {
+              validationMessage += '\n\nThis note is protected and cannot be modified through the API.';
+              validationMessage += '\nTo modify protected notes, you must:';
+              validationMessage += '\n• Unprotect the note in the Trilium UI first';
+              validationMessage += '\n• Or provide the decryption password (not supported via ETAPI)';
+            } else if (actualErrorMessage.includes('INVALID_PARENT') || errorCode === 'INVALID_PARENT') {
+              validationMessage += '\n\nThe specified parent note is invalid.';
+              validationMessage += '\n\nPossible causes:';
+              validationMessage += '\n• The parent note ID does not exist';
+              validationMessage += '\n• You cannot move a note to be its own descendant';
+              validationMessage += '\n• The parent note type may not accept children';
+              validationMessage += '\n\nSuggestions:';
+              validationMessage += '\n• Verify the parent note exists: trilium note get <parent-id>';
+              validationMessage += '\n• Check the note hierarchy to avoid circular references';
+            } else if (actualErrorMessage.includes('already has a branch') || actualErrorMessage.includes('already exists')) {
+              // Note already has a branch in the target location
+              validationMessage += '\n\nThis note already exists in the target location.';
+              validationMessage += '\n\nThis note is cloned (appears in multiple places).';
+              validationMessage += '\nTo manage cloned notes:';
+              validationMessage += '\n• Use "trilium branch list <noteId>" to see all locations';
+              validationMessage += '\n• Use "trilium branch delete <branchId>" to remove from a specific location';
+              validationMessage += '\n• Use "trilium note clone <noteId> <parentId>" to add to another location';
+              validationMessage += '\n• Notes with multiple branches cannot be moved, only cloned or uncloned';
+            } else if (actualErrorMessage.includes('multiple branches') || actualErrorMessage.includes('has more than one')) {
+              // Note has multiple branches (is cloned)
+              validationMessage += '\n\nThis note cannot be moved because it has multiple branches (is cloned).';
+              validationMessage += '\n\nCloned notes appear in multiple locations in the tree.';
+              validationMessage += '\nTo move a cloned note:';
+              validationMessage += '\n1. Remove it from all but one location using "trilium branch delete"';
+              validationMessage += '\n2. Then move the remaining single instance';
+              validationMessage += '\nOr:';
+              validationMessage += '\n• Use "trilium note clone" to add it to the new location';
+              validationMessage += '\n• Then delete the unwanted branch';
+            } else if (path.includes('/branches')) {
+              // Branch-specific validation errors
+              validationMessage += '\n\nBranch operation failed.';
+              validationMessage += '\n\nCommon causes:';
+              validationMessage += '\n• Note or parent note does not exist';
+              validationMessage += '\n• Attempting to create a circular reference';
+              validationMessage += '\n• Missing required fields (noteId, parentNoteId)';
+              validationMessage += '\n• Note may already be cloned to this location';
+            } else if (path.includes('/move') || method === 'POST' && path.includes('/branches')) {
+              // Move operation specific errors
+              validationMessage += '\n\nNote move operation failed.';
+              validationMessage += '\n\nPossible causes:';
+              validationMessage += '\n• Source note does not exist';
+              validationMessage += '\n• Target parent note does not exist';
+              validationMessage += '\n• Cannot move note to its own descendant';
+              validationMessage += '\n• Target location may not accept this note type';
+              validationMessage += '\n• Note may be cloned (has multiple branches)';
             }
+
+            // Add general validation help
+            if (!validationMessage.includes('Troubleshooting') && !validationMessage.includes('Common causes')) {
+              validationMessage += '\n\nValidation error in your request.';
+              validationMessage += '\n\nSuggestions:';
+              validationMessage += '\n• Check all required fields are provided';
+              validationMessage += '\n• Verify entity IDs are valid (4-32 alphanumeric characters)';
+              validationMessage += '\n• Use --verbose flag for more details';
+              validationMessage += '\n• Consult the API documentation for correct parameter format';
+            }
+
+            throw new ValidationError(validationMessage);
+
           case 403:
             throw new Error(`Permission denied: ${comprehensiveMessage}`);
+
           case 404:
-            throw new Error(`Not found: ${comprehensiveMessage}`);
+            // Extract entity ID from the URL if possible
+            const noteIdMatch = path.match(/\/notes\/([a-zA-Z0-9_]{4,32})/);
+            const branchIdMatch = path.match(/\/branches\/([a-zA-Z0-9_]{4,32})/);
+            const attachmentIdMatch = path.match(/\/attachments\/([a-zA-Z0-9_]{4,32})/);
+            const attributeIdMatch = path.match(/\/attributes\/([a-zA-Z0-9_]{4,32})/);
+
+            let notFoundMessage = comprehensiveMessage;
+
+            if (noteIdMatch) {
+              notFoundMessage = `Note '${noteIdMatch[1]}' not found`;
+              notFoundMessage += '\n\nPossible causes:';
+              notFoundMessage += '\n• The note ID does not exist in your Trilium instance';
+              notFoundMessage += '\n• The note may have been deleted';
+              notFoundMessage += '\n• You may have mistyped the note ID';
+              notFoundMessage += '\n\nSuggestions:';
+              notFoundMessage += '\n• Use "trilium search <query>" to find the correct note';
+              notFoundMessage += '\n• Use "trilium note list" to see available notes';
+              notFoundMessage += '\n• Verify the note ID in your Trilium UI';
+            } else if (branchIdMatch) {
+              notFoundMessage = `Branch '${branchIdMatch[1]}' not found`;
+              notFoundMessage += '\n\nThis usually means the note has been moved or the branch relationship no longer exists.';
+              notFoundMessage += '\n\nSuggestions:';
+              notFoundMessage += '\n• Use "trilium note get <noteId>" to check the note\'s current location';
+              notFoundMessage += '\n• The note may have been moved by another operation';
+            } else if (attachmentIdMatch) {
+              notFoundMessage = `Attachment '${attachmentIdMatch[1]}' not found`;
+              notFoundMessage += '\n\nThe attachment ID does not exist or has been deleted.';
+            } else if (attributeIdMatch) {
+              notFoundMessage = `Attribute '${attributeIdMatch[1]}' not found`;
+              notFoundMessage += '\n\nThe attribute ID does not exist or has been deleted.';
+            }
+
+            throw new NotFoundError(notFoundMessage);
           case 429:
             throw new Error(`Rate limited: ${comprehensiveMessage}`);
           case 500:
@@ -625,11 +755,49 @@ export class TriliumClient {
   // ========== Branches ==========
 
   /**
-   * Get branches for a note
+   * Get branches for a note with enhanced information
+   * Since there's no direct endpoint for this, we need to:
+   * 1. Get the note to find its branch IDs
+   * 2. Fetch each branch individually
+   * 3. Optionally fetch parent note titles for better context
    */
-  async getNoteBranches(noteId: EntityId): Promise<Branch[]> {
+  async getNoteBranches(noteId: EntityId, includeParentTitles: boolean = true): Promise<(Branch & { parentTitle?: string })[]> {
     validateEntityId(noteId, 'noteId');
-    return await this.sendRequest<Branch[]>('GET', `/notes/${noteId}/branches`);
+
+    // Get the note to find its branch IDs
+    const note = await this.getNote(noteId);
+
+    if (!isValidArray(note.parentBranchIds) || note.parentBranchIds.length === 0) {
+      return [];
+    }
+
+    // Fetch each branch details with parent titles
+    const branches: (Branch & { parentTitle?: string })[] = [];
+    for (const branchId of note.parentBranchIds) {
+      try {
+        const branch = await this.getBranch(branchId);
+
+        // Optionally fetch parent note title for better context
+        if (includeParentTitles) {
+          try {
+            const parentNote = await this.getNote(branch.parentNoteId);
+            (branch as Branch & { parentTitle?: string }).parentTitle = parentNote.title;
+          } catch {
+            // If parent can't be fetched, continue without title
+            (branch as Branch & { parentTitle?: string }).parentTitle = undefined;
+          }
+        }
+
+        branches.push(branch);
+      } catch (error) {
+        // If a branch can't be fetched, we'll skip it but log the issue
+        if (this.debugMode) {
+          console.debug(`Could not fetch branch ${branchId}: ${error}`);
+        }
+      }
+    }
+
+    return branches;
   }
 
   /**
@@ -1739,17 +1907,46 @@ export class TriliumClient {
     // Get existing branches
     const note = await this.getNote(noteId);
     if (!isValidArray(note.parentBranchIds)) {
-      throw new Error('Note has no branches');
+      throw new ValidationError('Note has no branches and cannot be moved');
     }
-    
-    // Delete old branch and create new one
+
+    // Check if note has multiple branches (is cloned)
+    if (note.parentBranchIds.length > 1) {
+      throw new ValidationError(
+        `Note '${noteId}' cannot be moved because it has ${note.parentBranchIds.length} branches (is cloned).\n\n` +
+        'Cloned notes appear in multiple locations in the tree.\n' +
+        'To move a cloned note:\n' +
+        '1. Remove it from all but one location using "trilium branch delete <branchId>"\n' +
+        '2. Then move the remaining single instance\n\n' +
+        'Or:\n' +
+        '• Use "trilium note clone" to add it to the new location\n' +
+        '• Then delete the unwanted branch\n\n' +
+        'Use "trilium branch list ' + noteId + '" to see all current locations'
+      );
+    }
+
+    // IMPORTANT: Create new branch FIRST, then delete old one
+    // This ensures the note is never at risk of being deleted if it's the last branch
     const oldBranchId = getFirstElement(note.parentBranchIds, 'Note has no parent branches');
-    await this.deleteBranch(oldBranchId);
-    
-    return await this.createBranch({
+
+    // Create the new branch (note now appears in both locations temporarily)
+    const newBranch = await this.createBranch({
       noteId,
       parentNoteId: newParentId
     });
+
+    // Now safe to delete the old branch (note remains in new location)
+    try {
+      await this.deleteBranch(oldBranchId);
+    } catch (error) {
+      // If deletion fails, at least the note is in the new location
+      // Log the error but don't fail the whole operation
+      if (this.debugMode) {
+        console.warn(`Warning: Could not delete old branch ${oldBranchId} after move. Note may appear in both locations.`);
+      }
+    }
+
+    return newBranch;
   }
 
   /**
