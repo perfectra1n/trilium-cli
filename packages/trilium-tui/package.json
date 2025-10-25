@@ -35,7 +35,7 @@
   "dependencies": {
     "@trilium-cli/zod": "file:../trilium-zod",
     "chalk": "^5.3.0",
-    "ink": "^4.4.1",
+    "ink": "^6.0.0",
     "ink-select-input": "^5.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^5.0.1",
